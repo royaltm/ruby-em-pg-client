@@ -3,7 +3,6 @@ require 'eventmachine'
 require 'em-synchrony'
 require 'em-synchrony/pg'
 require "em-synchrony/fiber_iterator"
-require 'em-synchrony/transaction'
 require 'pp'
 require 'benchmark'
 
