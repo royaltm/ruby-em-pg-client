@@ -7,7 +7,7 @@ Author::    Rafał Michalski  (mailto:rafal@yeondir.com)
 == DESCRIPTION
 
 *em-pg-client* is a PostgreSQL EventMachine client wrapper for Ruby
-based on (ruby-pg)[https://bitbucket.org/ged/ruby-pg]
+based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 == FEATURES
 
