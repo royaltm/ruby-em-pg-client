@@ -21,5 +21,6 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency "pg", ">= 0.13.2"
   s.add_runtime_dependency "eventmachine", ">= 0.12.10"
   s.add_development_dependency "rspec", "~> 2.8.0"
+  s.add_development_dependency "eventmachine", ">= 1.0.0.beta.1"
   s.add_development_dependency "em-synchrony", "~> 1.0.0"
 end
