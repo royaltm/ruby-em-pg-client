@@ -1,0 +1,203 @@
+= em-pg-client
+
+Author::    Rafał Michalski  (mailto:royaltm75@gmail.com)
+
+* http://github.com/royaltm/ruby-em-pg-client
+
+== DESCRIPTION
+
+*em-pg-client* is a PostgreSQL EventMachine client wrapper for Ruby
+based on (ruby-pg)[https://bitbucket.org/ged/ruby-pg]
+
+== FEATURES
+
+* minimal changes to PG::Conncet API
+* auto reconnects on socket connection loss (like server restarts)
+* true non-blocking asynchronous processing
+* EM-Synchrony[https://github.com/igrigorik/em-synchrony] support
+
+== BUGS/LIMITATIONS
+
+* actually no ActiveRecord or Sequel support (you are welcome to contribute).
+* connecting/reconnecting operation is blocking EM
+
+== TODO:
+
+* em-synchrony ORM (ActiveRecord, Sequel and maybe Datamapper) support
+* full async connection process (low priority)
+
+== REQUIREMENTS
+
+* ruby >= 1.9
+* https://bitbucket.org/ged/ruby-pg (>= 0.13)
+* http://rubyeventmachine.com
+* (optional) EM-Synchrony[https://github.com/igrigorik/em-synchrony]
+
+== INSTALL
+
+  $ sudo gem install em-pg-client
+
+== WHY?
+
+Because until now nobody did it to fit my needs.
+I've found at least 3 other implementations of EM postgres client:
+
+* https://github.com/jzimmek/em-postgresql-sequel
+* https://github.com/leftbee/em-postgresql-adapter
+* https://github.com/jtoy/em-postgres
+
+and (except the bundled one which uses no longer maintained postgres-pr library)
+all of them have similiar flaws:
+
+* 2 of them are designed to support some ORM only (ActiveRecord or Sequel)
+  so they are EM-Synchrony only,
+* non-standard API method names,
+* no (nonexistent or non-working) autoreconnect implementation,
+* not fully supporting asynchronous PG::Connection API.
+
+The last one is worth some comment:
+
+They all use blocking methods to retrieve whole result from server
+(PGConn#block() or PGConn#get_result() which also
+blocks when there is not enough buffered data on socket).
+
+This implementation makes use of non-blocking: PGConn#is_busy and PGConn#consume_input methods.
+Depending on size of result sets and concurrency level the gain in overall speed and responsiveness of your
+application might be actually quite huge. I already have done some tests[link:BENCHMARKS_rdoc.html].
+
+== Thanks
+
+The greetz go to:
+- Authors[https://bitbucket.org/ged/ruby-pg/wiki/Home#!copying] of +pg+ driver (especially for its async-api)
+- Francis Cianfrocca for great reactor framework (EventMachine[https://github.com/eventmachine/eventmachine])
+- Ilya Grigorik (igrigorik[https://github.com/igrigorik]) for (untangling)[http://www.igvita.com/2010/03/22/untangling-evented-code-with-ruby-fibers/] EM with Fibers
+
+== USAGE
+
+=== BASIC
+
+  require 'pg/em'
+  
+  # no async
+  pg = PG::EM::Client.new dbname: 'test'
+  pq.query('select * from foo') do |result|
+    puts result
+  end
+  
+  # asynchronous
+  EM.run do
+    pq.query('select * from foo') do |result|
+      raise result if result.is_a? ::Exception
+      puts result
+      EM.stop
+    end
+    puts "sent"
+  end
+
+=== AUTORECONNECTING IN ASYNC MODE
+
+  EM.run do
+    pg = PG::EM::Client.new dbname: 'test'
+    
+    try_query = lambda |&blk| do
+      pq.query('select * from foo') do |result|
+        raise result if result.is_a? ::Exception
+        puts result
+        blk.call
+      end
+    end
+    try_query.call {
+      system 'pg_ctl stop -m fast'
+      system 'pg_ctl start -w'
+      EM.add_timer(1) do
+        try_query.call { EM.stop }
+      end
+    }
+  end
+
+to disable this feature call:
+
+  pg.async_autoreconnect = false
+
+or
+
+  pg = PG::EM::Client.new dbname: 'test',
+    async_autoreconnect: false
+
+=== TRUE ASYNC
+
+  EM.run do
+    pool = (1..10).map { PG::EM::Client.new dbname: 'alpha' }
+
+    togo = pool.length
+
+    pool.each_with_index do |pg, i|
+      pg.query("select * from foo") do |result|
+        puts "recv: #{i}"
+        EM.stop if (togo-=1).zero?
+      end
+      puts "sent: #{i}"
+    end
+  end
+
+=== EM-Synchrony
+
+  require 'em-synchrony/pg'
+
+  EM.synchrony do
+    pg = PG::EM::Client.new dbname: 'test'
+    pg.query('select * from foo') do |result|
+      puts result
+    end
+    EM.stop
+  end
+
+==== Handling errors
+
+  EM.synchrony do
+    begin
+      pg.query('select * from foo') do |result|
+        puts result
+      end
+    rescue PG::Error => e
+      puts "PSQL error: #{e.inspect}"
+    end
+    EM.stop
+  end
+
+==== Parallel async queries
+
+  EM.synchrony do
+    pg = EM::Synchrony::ConnectionPool.new(size: 2) do  
+      PG::EM::Client.new :dbname => 'alpha'
+    end
+    multi = EventMachine::Synchrony::Multi.new
+    multi.add :foo, pg.aquery('select * from foo') # or #async_query()
+    multi.add :bar, pg.aquery('select * from bar') # #aquery() is just an alias
+    res = multi.perform
+    p res
+    EM.stop
+  end
+
+==== Fiber Concurrency
+
+  EM.synchrony do
+    # use ConnectionPool when more Fibers will be querying at the same time!
+    pg = EM::Synchrony::ConnectionPool.new(size: 5) do  
+      PG::EM::Client.new :dbname => 'alpha'
+    end
+    counter = 0
+    EM::Synchrony::FiberIterator.new(['select * from foo']*10, 5) do |query|
+      i = counter
+      pg.query(query) do |result|
+        puts "recv: #{i}"
+      end
+      puts "sent: #{i}"
+      counter += 1
+    end
+    EM.stop
+  end
+
+== LICENCE
+
+The MIT License - Copyright (c) 2012 Rafał Michalski
