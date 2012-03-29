@@ -5,15 +5,15 @@ Gem::Specification.new do |s|
   s.version = "0.1.0"
   s.required_ruby_version = ">= 1.9.1"
   s.date = "#{Time.now.strftime("%Y-%m-%d")}"
-  s.summary = "EventMachine PostgreSQL driver"
+  s.summary = "EventMachine PostgreSQL client"
   s.email = "rafal@yeondir.com"
   s.homepage = "http://github.com/royaltm/ruby-em-pg-client"
   s.require_path = "lib"
-  s.description = "PostgreSQL asynchronous EventMachine client wrapper"
+  s.description = "PostgreSQL asynchronous EventMachine client (ruby-pg) wrapper"
   s.authors = ["Rafal Michalski"]
-  s.files = `git ls-files`.split("\n")
+  s.files = `git ls-files`.split("\n") - ['.gitignore']
   s.test_files = Dir.glob("spec/**/*")
-  s.rdoc_options = << "--title" << "EventMachine PostgreSQL client" <<
+  s.rdoc_options << "--title" << "em-pg-client" <<
     "--main" << "README.rdoc"
   s.has_rdoc = true
   s.extra_rdoc_files = ["README.rdoc", "BENCHMARKS.rdoc"]
