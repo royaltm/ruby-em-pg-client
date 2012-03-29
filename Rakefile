@@ -17,13 +17,13 @@ task :gem do
 end
 
 desc "Install the library at local machnie"
-task :install => :build do 
-  sh "sudo gem install #$gem_name -l"
+task :install => :gem do 
+  sh "gem install #$gem_name -l"
 end
 
 desc "Uninstall the library from local machnie"
 task :uninstall do
-  sh "sudo gem uninstall #$gem_name"
+  sh "gem uninstall #$gem_name"
 end
 
 desc "Clean"
