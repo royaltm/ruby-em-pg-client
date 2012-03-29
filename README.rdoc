@@ -1,6 +1,6 @@
 = em-pg-client
 
-Author::    Rafał Michalski  (mailto:royaltm75@gmail.com)
+Author::    Rafał Michalski  (mailto:rafal@yeondir.com)
 
 * http://github.com/royaltm/ruby-em-pg-client
 
@@ -11,7 +11,7 @@ based on (ruby-pg)[https://bitbucket.org/ged/ruby-pg]
 
 == FEATURES
 
-* minimal changes to PG::Conncet API
+* minimal changes to PG::Connection API
 * auto reconnects on socket connection loss (like server restarts)
 * true non-blocking asynchronous processing
 * EM-Synchrony[https://github.com/igrigorik/em-synchrony] support
