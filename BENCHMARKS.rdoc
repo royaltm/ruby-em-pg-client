@@ -1,6 +1,6 @@
 == Benchmarks
 
-I've done some benchmark tests[link:../benchmarks/em_pg.rb] to compare fully async and blocking em-pg drivers.
+I've done some benchmark tests[link:benchmarks/em_pg.rb] to compare fully async and blocking em-pg drivers.
 
 The goal of the test is simply to retrieve (~80000) rows from table with a lot of text data, in chunks, using parallel connections.
 The parallel method uses synchrony for simplicity.
