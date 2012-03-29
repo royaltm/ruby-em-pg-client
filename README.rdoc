@@ -63,7 +63,7 @@ blocks when there is not enough buffered data on socket).
 
 This implementation makes use of non-blocking: PGConn#is_busy and PGConn#consume_input methods.
 Depending on size of result sets and concurrency level the gain in overall speed and responsiveness of your
-application might be actually quite huge. I already have done some tests[link:BENCHMARKS_rdoc.html].
+application might be actually quite huge. I already have done some tests[link:BENCHMARKS.rdoc].
 
 == Thanks
 
