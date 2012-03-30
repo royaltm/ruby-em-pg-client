@@ -7,7 +7,8 @@ $gem_name = "em-pg-client"
 desc "Run tests"
 task :test do
   puts "WARNING: The test needs to be run with an available local PostgreSQL server"
-  sh "rspec spec/em_client.rb"
+  sh "rspec spec/em_release_client.rb"
+  sh "rspec spec/em_devel_client.rb"
   sh "rspec spec/em_synchrony_client.rb"
 end
 
