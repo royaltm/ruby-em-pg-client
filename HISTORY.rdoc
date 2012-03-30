@@ -1,8 +1,8 @@
-[next release]
+next release
 - docs updated
 - added development dependency for eventmachine >= 1.0.0.beta.1
 - added separate client specs for eventmachine = 0.12.10
 - added error checking to eventmachine specs
 
-[0.1.0]
+0.1.0
 - first release
