@@ -1,46 +1,46 @@
 require 'pg'
 module PG
   module EM
+    # == PostgreSQL EventMachine client
+    #
+    # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
+    # Licence:: MIT License
+    #
+    #
+    # PG::EM::Client is a wrapper for PG::Connection which (re)defines methods:
+    #
+    # - +async_exec+ (alias: +async_query+)
+    # - +async_prepare+
+    # - +async_exec_prepared+
+    #
+    # and following:
+    #
+    # - +exec+ (alias: +query+)
+    # - +exec_prepared+
+    # - +prepare+
+    #
+    # which autodetects if EventMachine is running and uses appropriate
+    # (async or sync) method version.
+    #
+    # Async methods might try to reset connection on connection error,
+    # you won't even notice that (except for warning message from PG).
+    #
+    # To disable such behavior set:
+    #   client.async_autoreconnect = false
+    #
+    # or pass as new() hash argument:
+    #   PG::EM::Client.new database: 'bar', async_autoreconnect: false
+    #
+    # Otherwise nothing changes in PG::Connect API.
+    # See PG::Connect docs for arguments to above methods.
+    #
+    # *Warning:*
+    #
+    # +async_exec_prepared+ after +async_prepare+ should only be invoked on
+    # the *same* connection.
+    # If you are using connection pool, make sure to acquire single connection first.
+    #
     class Client < PG::Connection
-      # == PostgreSQL EventMachine client
-      #
-      # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
-      # Licence:: MIT License
-      #
-      #
-      # PG::EM::Client is a wrapper for PG::Connection which (re)defines methods:
-      #
-      # - +async_exec+ (alias: +async_query+)
-      # - +async_prepare+
-      # - +async_exec_prepared+
-      #
-      # and following:
-      #
-      # - +exec+ (alias: +query+)
-      # - +exec_prepared+
-      # - +prepare+
-      #
-      # which autodetects if EventMachine is running and uses appropriate
-      # (async or sync) method version.
-      #
-      # Async methods might try to reset connection on connection error,
-      # you won't even notice that (except for warning message from PG).
-      #
-      # To disable such behavior set:
-      #   client.async_autoreconnect = false
-      #
-      # or pass as new() hash argument:
-      #   PG::EM::Client.new database: 'bar', async_autoreconnect: false
-      #
-      # Otherwise nothing changes in PG::Connect API.
-      # See PG::Connect docs for arguments to above methods.
-      #
-      # *Warning:*
-      #
-      # +async_exec_prepared+ after +async_prepare+ should only be invoked on
-      # the *same* connection.
-      # If you are using connection pool, make sure to acquire single connection first.
-      #
 
       attr_accessor :async_autoreconnect
 

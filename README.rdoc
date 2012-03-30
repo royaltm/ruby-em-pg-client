@@ -49,7 +49,7 @@ I've found at least 3 other implementations of EM postgres client:
 and (except the bundled one which uses no longer maintained postgres-pr library)
 all of them have similiar flaws:
 
-* 2 of them are designed to support some ORM only (ActiveRecord or Sequel)
+* 2 of them are designed to support some ORM (ActiveRecord or Sequel)
   so they are EM-Synchrony only,
 * non-standard API method names,
 * no (nonexistent or non-working) autoreconnect implementation,
@@ -81,14 +81,14 @@ The greetz go to:
   # no async
   pg = PG::EM::Client.new dbname: 'test'
   pq.query('select * from foo') do |result|
-    puts result
+    puts Array(result).inspect
   end
   
   # asynchronous
   EM.run do
     pq.query('select * from foo') do |result|
       raise result if result.is_a? ::Exception
-      puts result
+      puts Array(result).inspect
       EM.stop
     end
     puts "sent"
@@ -98,11 +98,10 @@ The greetz go to:
 
   EM.run do
     pg = PG::EM::Client.new dbname: 'test'
-    
-    try_query = lambda |&blk| do
-      pq.query('select * from foo') do |result|
+    try_query = lambda do |&blk|
+      pg.query('select * from foo') do |result|
         raise result if result.is_a? ::Exception
-        puts result
+        puts Array(result).inspect
         blk.call
       end
     end
@@ -147,7 +146,7 @@ or
   EM.synchrony do
     pg = PG::EM::Client.new dbname: 'test'
     pg.query('select * from foo') do |result|
-      puts result
+      puts Array(result).inspect
     end
     EM.stop
   end
