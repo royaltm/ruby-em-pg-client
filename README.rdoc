@@ -230,13 +230,13 @@ caller. See +#on_reconnect+ docs for details.
 
 ==== Async reconnect with on_reconnect callback
 
-    EM.synchrony do
+  EM.synchrony do
+    on_reconnect = proc do |c, e|
+      c.prepare('bar', 'select * from foo order by cdate desc')
+    end
     pg = EM::Synchrony::ConnectionPool.new(size: 5) do
-      p = PG::EM::Client.new dbname: 'test'
-      p.on_reconnect = proc do |c, e|
-        c.prepare('bar', 'select * from foo order by cdate desc')
-      end
-      p.on_reconnect.call p
+      p = PG::EM::Client.new dbname: 'test', on_reconnect: on_reconnect
+      on_reconnect.call p
       p
     end
     try_query = lambda do
