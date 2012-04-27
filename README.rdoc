@@ -150,8 +150,8 @@ command is executed:
     end
   end
 
-As you can see it is possible to send async query from inside on_reconnect
-proc however you have to pass Deferrable from the async call back to it's
+As you can see it's possible to send async query from inside on_reconnect
+proc however you have to pass +Deferrable+ from the async call back to
 caller. See +#on_reconnect+ docs for details.
 
 === TRUE ASYNC

@@ -52,7 +52,7 @@ module PG
       #
       # - +async_autoreconnect+ is switched off (do not try to change it from
       #   inside +on_reconnect+)
-      # - if +on_reconnect+ returns +false+ (explicitely, +nil+ is ignored)
+      # - if +on_reconnect+ returns +false+ (explicitly, +nil+ is ignored)
       #   the original +exception+ is raised and the send query command is
       #   not invoked at all
       # - if return value of +on_reconnect+ responds to +callback+ and +errback+
