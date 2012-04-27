@@ -44,23 +44,25 @@ module PG
 
       attr_accessor :async_autoreconnect
       
-      # +on_reconnect+ is a Proc that is called after a connection with the server
-      # has been re-established
-      # it's invoked with +connection+ as first argument and original
+      # +on_reconnect+ is a user defined Proc that is called after a connection
+      # with the server has been re-established.
+      # It's invoked with +connection+ as first argument and original
       # +exception+ that caused the reconnecting process as second argument.
+      #
       # Certain rules should apply to on_reconnect proc:
       #
       # - +async_autoreconnect+ is switched off (do not try to change it from
-      #   inside +on_reconnect+)
-      # - if +on_reconnect+ returns +false+ (explicitly, +nil+ is ignored)
+      #   inside on_reconnect proc).
+      # - If proc returns +false+ (explicitly, +nil+ is ignored)
       #   the original +exception+ is raised and the send query command is
-      #   not invoked at all
-      # - if return value of +on_reconnect+ responds to +callback+ and +errback+
-      #   methods (like +Deferrable+), the send query command will be bound to this
-      #   deferrable's success callback instead of immediately calling it
-      # - other return values from on_reconnect are ignored
+      #   not invoked at all.
+      # - If return value responds to +callback+ and +errback+ methods
+      #   (like +Deferrable+), the send query command will be bound to this
+      #   deferrable's success callback. Otherwise the send query command is called
+      #   immediately after on_reconnect proc is executed.
+      # - Other return values are ignored.
       #
-      # you may pass this proc as +:on_reconnect+ option to PG::EM::Client.new
+      # You may pass this proc as +:on_reconnect+ option to PG::EM::Client.new.
       #
       # Example:
       #   pg.on_reconnect = proc do |conn, ex|
