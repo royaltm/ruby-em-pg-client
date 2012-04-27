@@ -123,6 +123,37 @@ or
   pg = PG::EM::Client.new dbname: 'test',
     async_autoreconnect: false
 
+It is also possible to define +on_reconnect+ callback to be invoked
+while the connection has been reset. It is called just before the send query
+command is executed:
+
+  EM.run do
+    pg = PG::EM::Client.new dbname: 'test'
+    pg.prepare('bar', 'select * from foo order by cdate desc') do
+      pg.on_reconnect = proc { |c, e|
+        c.prepare('bar', 'select * from foo order by cdate desc')
+      }
+      try_query = lambda do |&blk|
+        pg.exec_prepared('bar') do |result|
+          raise result if result.is_a? ::Exception
+          puts Array(result).inspect
+          blk.call
+        end
+      end
+      try_query.call {
+        system 'pg_ctl stop -m fast'
+        system 'pg_ctl start -w'
+        EM.add_timer(1) do
+          try_query.call { EM.stop }
+        end
+      }
+    end
+  end
+
+As you can see it is possible to send async query from inside on_reconnect
+proc however you have to pass Deferrable from the async call back to it's
+caller. See +#on_reconnect+ docs for details.
+
 === TRUE ASYNC
 
   EM.run do
@@ -194,6 +225,28 @@ or
       puts "sent: #{i}"
       counter += 1
     end
+    EM.stop
+  end
+
+==== Async reconnect with on_reconnect callback
+
+  EM.synchrony do
+    pg = PG::EM::Client.new dbname: 'test'
+    pg.prepare('bar', 'select * from foo order by cdate desc')
+    pg.on_reconnect = proc do |c, e|
+      c.prepare('bar', 'select * from foo order by cdate desc')
+    end
+    try_query = lambda do
+      pg.exec_prepared('bar') do |result|
+        raise result if result.is_a? ::Exception
+        puts Array(result).inspect
+      end
+    end
+    try_query.call
+    system 'pg_ctl stop -m fast'
+    system 'pg_ctl start -w'
+    EM::Synchrony.sleep(1)
+    try_query.call
     EM.stop
   end
 

@@ -43,6 +43,31 @@ module PG
     class Client < PG::Connection
 
       attr_accessor :async_autoreconnect
+      
+      # +on_reconnect+ is a Proc that is called after a connection with the server
+      # has been re-established
+      # it's invoked with +connection+ as first argument and original
+      # +exception+ that caused the reconnecting process as second argument.
+      # Certain rules should apply to on_reconnect proc:
+      #
+      # - +async_autoreconnect+ is switched off (do not try to change it from
+      #   inside +on_reconnect+)
+      # - if +on_reconnect+ returns +false+ (explicitely, +nil+ is ignored)
+      #   the original +exception+ is raised and the send query command is
+      #   not invoked at all
+      # - if return value of +on_reconnect+ responds to +callback+ and +errback+
+      #   methods (like +Deferrable+), the send query command will be bound to this
+      #   deferrable's success callback instead of immediately calling it
+      # - other return values from on_reconnect are ignored
+      #
+      # you may pass this proc as +:on_reconnect+ option to PG::EM::Client.new
+      #
+      # Example:
+      #   pg.on_reconnect = proc do |conn, ex|
+      #     conn.prepare("birds_by_name", "select id, name from animals order by name where species=$1", ['birds'])
+      #   end
+      #
+      attr_accessor :on_reconnect
 
       module Watcher
         def initialize(client, deferrable)
@@ -66,10 +91,15 @@ module PG
 
       def initialize(*args)
         @async_autoreconnect = true
+        @on_reconnect = nil
         if args.last.is_a? Hash
           args.last.reject! do |key, value|
-            if key.to_s == 'async_autoreconnect'
+            case key.to_s
+            when 'async_autoreconnect'
               @async_autoreconnect = !!value
+              true
+            when 'on_reconnect'
+              @on_reconnect = value if value.respond_to? :call
               true
             end
           end
@@ -85,22 +115,41 @@ module PG
 
         class_eval <<-EOD
         def async_#{name}(*args, &blk)
+          df = ::EM::DefaultDeferrable.new
+          if block_given?
+            df.callback(&blk)
+            df.errback(&blk)
+          end
           begin
             #{send_name}(*args)
           rescue PG::Error => e
             if self.status != PG::CONNECTION_OK && async_autoreconnect
               reset
-              #{send_name}(*args)
+              if on_reconnect
+                begin
+                  self.async_autoreconnect = false
+                  returned_df = on_reconnect.call(self, e)
+                  raise e if returned_df == false
+                  if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                    returned_df.callback do
+                      #{send_name}(*args)
+                      ::EM.watch(self.socket, Watcher, self, df).notify_readable = true
+                    end
+                    returned_df.errback do |ex|
+                      df.fail(ex)
+                    end
+                    return df
+                  end
+                ensure
+                  self.async_autoreconnect = true
+                end
+              end
+              #{send_name}(*args) 
             else
               raise e
             end
           end
-          df = ::EM::DefaultDeferrable.new
           ::EM.watch(self.socket, Watcher, self, df).notify_readable = true
-          if block_given?
-            df.callback(&blk)
-            df.errback(&blk)
-          end
           df
         end
         EOD

@@ -1,4 +1,5 @@
 next release
+- added on_reconnect callback
 - docs updated
 - added development dependency for eventmachine >= 1.0.0.beta.1
 - added separate client specs for eventmachine = 0.12.10
