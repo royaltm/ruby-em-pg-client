@@ -10,23 +10,19 @@ module PG
       end
       
       def protect(fail_value = nil)
-        begin
-          yield
-        rescue Exception => e
-          ::EM.next_tick { fail(e) }
-          fail_value
-        end
+        yield
+      rescue Exception => e
+        ::EM.next_tick { fail(e) }
+        fail_value
       end
       
       def protect_and_succeed(fail_value = nil)
-        begin
-          ret = yield
-        rescue Exception => e
-          ::EM.next_tick { fail(e) }
-          return fail_value
-        else
-          ::EM.next_tick { succeed(ret) }
-        end
+        ret = yield
+      rescue Exception => e
+        ::EM.next_tick { fail(e) }
+        fail_value
+      else
+        ::EM.next_tick { succeed(ret) }
         ret
       end
     end
@@ -135,7 +131,6 @@ module PG
               @deferrable.protect do
                 raise PG::Error, "timeout expired (async)"
               end
-              client.finish
             end
           end
         end
@@ -165,7 +160,6 @@ module PG
               end
               @client
             end
-            @client.finish unless success
           end
         end
       end
@@ -222,7 +216,7 @@ module PG
       end
 
       def async_autoreconnect!(deferrable, error, &send_proc)
-        if async_autoreconnect && (self.finished? || self.status != PG::CONNECTION_OK)
+        if async_autoreconnect && self.status != PG::CONNECTION_OK
           reset_df = async_reset
           reset_df.errback { |ex| deferrable.fail(ex) }
           reset_df.callback do
