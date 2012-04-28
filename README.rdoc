@@ -12,19 +12,18 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 == FEATURES
 
 * minimal changes to PG::Connection API
-* auto reconnects on socket connection loss (like server restarts)
+* fully async auto reconnects on socket connection loss (like server restarts)
 * true non-blocking asynchronous processing
 * EM-Synchrony[https://github.com/igrigorik/em-synchrony] support
 
 == BUGS/LIMITATIONS
 
 * actually no ActiveRecord or Sequel support (you are welcome to contribute).
-* connecting/reconnecting operation is blocking EM
 
 == TODO:
 
 * em-synchrony ORM (ActiveRecord, Sequel and maybe Datamapper) support
-* full async connection process (low priority)
+  as separate projects
 
 == REQUIREMENTS
 
@@ -143,9 +142,7 @@ command is executed:
       try_query.call {
         system 'pg_ctl stop -m fast'
         system 'pg_ctl start -w'
-        EM.add_timer(1) do
-          try_query.call { EM.stop }
-        end
+        try_query.call { EM.stop }
       }
     end
   end
@@ -157,16 +154,20 @@ caller. See +#on_autoreconnect+ docs for details.
 === TRUE ASYNC
 
   EM.run do
-    pool = (1..10).map { PG::EM::Client.new dbname: 'alpha' }
+    pool = (1..10).map {
+      PG::EM::Client.async_connect dbname: 'test', connect_timeout: 5 }
 
     togo = pool.length
 
-    pool.each_with_index do |pg, i|
-      pg.query("select * from foo") do |result|
-        puts "recv: #{i}"
-        EM.stop if (togo-=1).zero?
+    pool.each_with_index do |df, i|
+      df.callback do |pg|
+        pg.query("select * from foo") do |result|
+          puts "recv: #{i}"
+          EM.stop if (togo-=1).zero?
+        end
+        puts "sent: #{i}"
       end
-      puts "sent: #{i}"
+      df.errback { |ex| raise ex }
     end
   end
 
@@ -199,7 +200,7 @@ caller. See +#on_autoreconnect+ docs for details.
 
   EM.synchrony do
     pg = EM::Synchrony::ConnectionPool.new(size: 2) do  
-      PG::EM::Client.new :dbname => 'alpha'
+      PG::EM::Client.new :dbname => 'test'
     end
     multi = EventMachine::Synchrony::Multi.new
     multi.add :foo, pg.aquery('select * from foo') # or #async_query()
@@ -214,7 +215,7 @@ caller. See +#on_autoreconnect+ docs for details.
   EM.synchrony do
     # use ConnectionPool when more Fibers will be querying at the same time!
     pg = EM::Synchrony::ConnectionPool.new(size: 5) do  
-      PG::EM::Client.new :dbname => 'alpha'
+      PG::EM::Client.new :dbname => 'test'
     end
     counter = 0
     EM::Synchrony::FiberIterator.new(['select * from foo']*10, 5) do |query|
