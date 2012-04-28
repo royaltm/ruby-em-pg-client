@@ -48,6 +48,34 @@ module PG
 
       alias_method :query, :exec
 
+      def async_autoreconnect!(deferrable, error, &send_proc)
+        if async_autoreconnect && (self.finished? || self.status != PG::CONNECTION_OK)
+          reset_df = async_reset
+          reset_df.errback { |ex| deferrable.fail(ex) }
+          reset_df.callback do
+            Fiber.new do
+              if on_autoreconnect
+                returned_df = on_autoreconnect.call(self, error)
+                if returned_df == false
+                  deferrable.fail(error)
+                elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                  returned_df.callback { deferrable.protect(&send_proc) }
+                  returned_df.errback { |ex| deferrable.fail(ex) }
+                elsif returned_df.is_a?(Exception)
+                  deferrable.fail(returned_df)
+                else
+                  deferrable.protect(&send_proc)
+                end
+              else
+                deferrable.protect(&send_proc)
+              end
+            end.resume
+          end
+        else
+          deferrable.fail(error)
+        end
+      end
+
     end
   end
 end
