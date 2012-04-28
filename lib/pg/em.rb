@@ -1,6 +1,35 @@
 require 'pg'
 module PG
   module EM
+    class FeaturedDeferrable < ::EM::DefaultDeferrable
+      def initialize(&blk)
+        if block_given?
+          callback(&blk)
+          errback(&blk)
+        end
+      end
+      
+      def protect(fail_value = nil)
+        begin
+          yield
+        rescue Exception => e
+          ::EM.next_tick { fail(e) }
+          fail_value
+        end
+      end
+      
+      def protect_and_succeed(fail_value = nil)
+        begin
+          ret = yield
+        rescue Exception => e
+          ::EM.next_tick { fail(e) }
+          return fail_value
+        else
+          ::EM.next_tick { succeed(ret) }
+        end
+        ret
+      end
+    end
     # == PostgreSQL EventMachine client
     #
     # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
@@ -42,39 +71,41 @@ module PG
     #
     class Client < PG::Connection
 
-      attr_accessor :async_autoreconnect
+      attr_accessor :async_autoreconnect, :connect_timeout
       
-      # +on_reconnect+ is a user defined Proc that is called after a connection
+      # +on_autoreconnect+ is a user defined Proc that is called after a connection
       # with the server has been re-established.
       # It's invoked with +connection+ as first argument and original
       # +exception+ that caused the reconnecting process as second argument.
       #
-      # Certain rules should apply to on_reconnect proc:
+      # Certain rules should apply to on_autoreconnect proc:
       #
-      # - +async_autoreconnect+ is switched off (do not try to change it from
-      #   inside on_reconnect proc).
       # - If proc returns +false+ (explicitly, +nil+ is ignored)
-      #   the original +exception+ is raised and the send query command is
-      #   not invoked at all.
+      #   the original +exception+ is passed to +Defferable#fail+ and the send
+      #   query command is not invoked at all.
+      # - If return value is an instance of exception it is passed to
+      #   +Defferable#fail+ and the send query command is not invoked at all.
       # - If return value responds to +callback+ and +errback+ methods
       #   (like +Deferrable+), the send query command will be bound to this
-      #   deferrable's success callback. Otherwise the send query command is called
-      #   immediately after on_reconnect proc is executed.
-      # - Other return values are ignored.
+      #   deferrable's success callback. Otherwise the send query command is
+      #   called immediately after on_autoreconnect proc is executed.
+      # - Other return values are ignored and the send query command is called
+      #   immediately after on_autoreconnect proc is executed.
       #
-      # You may pass this proc as +:on_reconnect+ option to PG::EM::Client.new.
+      # You may pass this proc as +:on_autoreconnect+ option to PG::EM::Client.new.
       #
       # Example:
-      #   pg.on_reconnect = proc do |conn, ex|
+      #   pg.on_autoreconnect = proc do |conn, ex|
       #     conn.prepare("birds_by_name", "select id, name from animals order by name where species=$1", ['birds'])
       #   end
       #
-      attr_accessor :on_reconnect
+      attr_accessor :on_autoreconnect
 
       module Watcher
-        def initialize(client, deferrable)
+        def initialize(client, deferrable, send_proc)
           @client = client
           @deferrable = deferrable
+          @send_proc = send_proc
         end
 
         def notify_readable
@@ -83,6 +114,8 @@ module PG
           detach
           begin
             result = @client.get_last_result
+          rescue PG::Error => e
+            @client.async_autoreconnect!(@deferrable, e, &@send_proc)
           rescue Exception => e
             @deferrable.fail(e)
           else
@@ -91,22 +124,127 @@ module PG
         end
       end
 
-      def initialize(*args)
-        @async_autoreconnect = true
-        @on_reconnect = nil
+      module ConnectWatcher
+        def initialize(client, deferrable, poll_method)
+          @client = client
+          @deferrable = deferrable
+          @poll_method = :"#{poll_method}_poll"
+          if (timeout = client.connect_timeout) > 0
+            @timer = ::EM::Timer.new(timeout) do
+              detach
+              @deferrable.protect do
+                raise PG::Error, "timeout expired (async)"
+              end
+              client.finish
+            end
+          end
+        end
+
+        def notify_writable
+          poll_connection_and_check
+        end
+
+        def notify_readable
+          poll_connection_and_check
+        end
+
+        def poll_connection_and_check
+          case @client.__send__(@poll_method)
+          when PG::PGRES_POLLING_READING
+            self.notify_readable = true
+            self.notify_writable = false
+          when PG::PGRES_POLLING_WRITING
+            self.notify_writable = true
+            self.notify_readable = false
+          when PG::PGRES_POLLING_OK, PG::PGRES_POLLING_FAILED
+            @timer.cancel if @timer
+            detach
+            success = @deferrable.protect_and_succeed do
+              unless @client.status == PG::CONNECTION_OK
+                raise PG::Error, @client.error_message
+              end
+              @client
+            end
+            @client.finish unless success
+          end
+        end
+      end
+
+      def self.parse_async_args(*args)
+        async_args = {
+          :@async_autoreconnect => true,
+          :@connect_timeout => 0,
+          :@on_autoreconnect => nil,
+        }
         if args.last.is_a? Hash
           args.last.reject! do |key, value|
             case key.to_s
             when 'async_autoreconnect'
-              @async_autoreconnect = !!value
+              async_args[:@async_autoreconnect] = !!value
               true
             when 'on_reconnect'
-              @on_reconnect = value if value.respond_to? :call
+              raise ArgumentError.new("on_reconnect is no longer supported, use on_autoreconnect")
+            when 'on_autoreconnect'
+              async_args[:@on_autoreconnect] = value if value.respond_to? :call
               true
+            when 'connect_timeout'
+              async_args[:@connect_timeout] = value.to_f
+              false
             end
           end
         end
+        async_args
+      end
+
+      def self.async_connect(*args, &blk)
+        df = PG::EM::FeaturedDeferrable.new(&blk)
+        async_args = parse_async_args(*args)
+        conn = df.protect { connect_start(*args) }
+        if conn
+          async_args.each {|k, v| conn.instance_variable_set(k, v) }
+          ::EM.watch(conn.socket, ConnectWatcher, conn, df, :connect).poll_connection_and_check
+        end
+        df
+      end
+
+      def async_reset(&blk)
+        df = PG::EM::FeaturedDeferrable.new(&blk)
+        ret = df.protect(:fail) { reset_start }
+        unless ret == :fail
+          ::EM.watch(self.socket, ConnectWatcher, self, df, :reset).poll_connection_and_check
+        end
+        df
+      end
+
+      def initialize(*args)
+        Client.parse_async_args(*args).each {|k, v| self.instance_variable_set(k, v) }
         super(*args)
+      end
+
+      def async_autoreconnect!(deferrable, error, &send_proc)
+        if async_autoreconnect && (self.finished? || self.status != PG::CONNECTION_OK)
+          reset_df = async_reset
+          reset_df.errback { |ex| deferrable.fail(ex) }
+          reset_df.callback do
+            if on_autoreconnect
+              returned_df = on_autoreconnect.call(self, error)
+              if returned_df == false
+                deferrable.fail(error)
+              elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                returned_df.callback { deferrable.protect(&send_proc) }
+                returned_df.errback { |ex| deferrable.fail(ex) }
+              elsif returned_df.is_a?(Exception)
+                deferrable.fail(returned_df)
+              else
+                deferrable.protect(&send_proc)
+              end
+            else
+              deferrable.protect(&send_proc)
+            end
+          end
+        else
+          deferrable.fail(error)
+        end
       end
 
       %w(
@@ -117,41 +255,19 @@ module PG
 
         class_eval <<-EOD
         def async_#{name}(*args, &blk)
-          df = ::EM::DefaultDeferrable.new
-          if block_given?
-            df.callback(&blk)
-            df.errback(&blk)
+          df = PG::EM::FeaturedDeferrable.new(&blk)
+          send_proc = proc do
+            #{send_name}(*args)
+            ::EM.watch(self.socket, Watcher, self, df, send_proc).notify_readable = true
           end
           begin
-            #{send_name}(*args)
+            send_proc.call
           rescue PG::Error => e
-            if self.status != PG::CONNECTION_OK && async_autoreconnect
-              reset
-              if on_reconnect
-                begin
-                  self.async_autoreconnect = false
-                  returned_df = on_reconnect.call(self, e)
-                  raise e if returned_df == false
-                  if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
-                    returned_df.callback do
-                      #{send_name}(*args)
-                      ::EM.watch(self.socket, Watcher, self, df).notify_readable = true
-                    end
-                    returned_df.errback do |ex|
-                      df.fail(ex)
-                    end
-                    return df
-                  end
-                ensure
-                  self.async_autoreconnect = true
-                end
-              end
-              #{send_name}(*args) 
-            else
-              raise e
-            end
+            async_autoreconnect!(df, e, &send_proc)
           end
-          ::EM.watch(self.socket, Watcher, self, df).notify_readable = true
+          df
+        rescue Exception => e
+          df.fail(e)
           df
         end
         EOD
