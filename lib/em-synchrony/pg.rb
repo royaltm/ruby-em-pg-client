@@ -15,11 +15,12 @@ module PG
       # - exec (aliased as query)
       # - exec_prepared
       # - prepare
-      %w(exec exec_prepared prepare).each do |name|
+      %w(exec exec_prepared prepare reset self.connect).each do |name|
+        async_name = "async_#{name.split('.').last}"
         class_eval <<-EOD
           def #{name}(*args, &blk)
             if ::EM.reactor_running?
-              df = async_#{name}(*args)
+              df = #{async_name}(*args)
               f = Fiber.current
               df.callback { |res| f.resume(res) }
               df.errback  { |err| f.resume(err) }
@@ -36,10 +37,17 @@ module PG
             end
           end
         EOD
+      end
 
+      class << self
+        alias_method :new, :connect
+        alias_method :open, :connect
+        alias_method :setdb, :connect
+        alias_method :setdblogin, :connect
       end
 
       alias_method :query, :exec
+
     end
   end
 end
