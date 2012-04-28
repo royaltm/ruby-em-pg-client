@@ -1,3 +1,10 @@
+next release
+- added connect_timeout property with for async connect/reset
+- fix: async_autoreconnect for tcp/ip connections
+- fix: async_* does not raise errors; errors handled by deferrable
+- rework async_autoreconnect in fully async manner
+- added async_connect() and #async_reset()
+- API change: on_reconnect -> on_autoreconnect
 0.1.1
 - added on_reconnect callback
 - docs updated
