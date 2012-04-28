@@ -52,7 +52,7 @@ end
 # retrieve resources using single select query
 def single(repeat=1)
   rowcount = 0
-  p = PGconn.new :dbname => $dbname
+  p = PGconn.new :dbname => $dbname, :host => 'localhost'
   p.query('select count(*) from resources') do |result|
     rowcount = result.getvalue(0,0).to_i
   end
