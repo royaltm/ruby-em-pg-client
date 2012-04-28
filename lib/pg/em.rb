@@ -67,7 +67,7 @@ module PG
     #
     class Client < PG::Connection
 
-      attr_accessor :async_autoreconnect, :connect_timeout
+      attr_accessor :async_autoreconnect, :connect_timeout, :query_timeout
       
       # +on_autoreconnect+ is a user defined Proc that is called after a connection
       # with the server has been re-established.
@@ -96,17 +96,29 @@ module PG
       #   end
       #
       attr_accessor :on_autoreconnect
+      
+      attr_accessor :async_command_aborted
 
       module Watcher
         def initialize(client, deferrable, send_proc)
           @client = client
           @deferrable = deferrable
           @send_proc = send_proc
+          if (timeout = client.query_timeout) > 0
+            @timer = ::EM::Timer.new(timeout) do
+              detach
+              @client.async_command_aborted = true
+              @deferrable.protect do
+                raise PG::Error, "query timeout expired (async)"
+              end
+            end
+          end
         end
 
         def notify_readable
           @client.consume_input
           return if @client.is_busy
+          @timer.cancel if @timer
           detach
           begin
             result = @client.get_last_result
@@ -168,7 +180,9 @@ module PG
         async_args = {
           :@async_autoreconnect => true,
           :@connect_timeout => 0,
+          :@query_timeout => 0,
           :@on_autoreconnect => nil,
+          :@async_command_aborted => false,
         }
         if args.last.is_a? Hash
           args.last.reject! do |key, value|
@@ -184,6 +198,9 @@ module PG
             when 'connect_timeout'
               async_args[:@connect_timeout] = value.to_f
               false
+            when 'query_timeout'
+              async_args[:@query_timeout] = value.to_f
+              true
             end
           end
         end
@@ -202,6 +219,7 @@ module PG
       end
 
       def async_reset(&blk)
+        @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
         ret = df.protect(:fail) { reset_start }
         unless ret == :fail
@@ -216,19 +234,19 @@ module PG
       end
 
       def async_autoreconnect!(deferrable, error, &send_proc)
-        if async_autoreconnect && self.status != PG::CONNECTION_OK
+        if async_autoreconnect && (@async_command_aborted || self.status != PG::CONNECTION_OK)
           reset_df = async_reset
           reset_df.errback { |ex| deferrable.fail(ex) }
           reset_df.callback do
             if on_autoreconnect
               returned_df = on_autoreconnect.call(self, error)
               if returned_df == false
-                deferrable.fail(error)
+                ::EM.next_tick { deferrable.fail(error) }
               elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
                 returned_df.callback { deferrable.protect(&send_proc) }
                 returned_df.errback { |ex| deferrable.fail(ex) }
               elsif returned_df.is_a?(Exception)
-                deferrable.fail(returned_df)
+                ::EM.next_tick { deferrable.fail(returned_df) }
               else
                 deferrable.protect(&send_proc)
               end
@@ -237,7 +255,7 @@ module PG
             end
           end
         else
-          deferrable.fail(error)
+          ::EM.next_tick { deferrable.fail(error) }
         end
       end
 
@@ -256,12 +274,12 @@ module PG
           end
           begin
             send_proc.call
+            @async_command_aborted = false
           rescue PG::Error => e
             async_autoreconnect!(df, e, &send_proc)
+          rescue Exception => e
+            ::EM.next_tick { df.fail(e) }
           end
-          df
-        rescue Exception => e
-          df.fail(e)
           df
         end
         EOD
