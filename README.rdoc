@@ -153,7 +153,7 @@ caller. See +#on_autoreconnect+ docs for details.
 
 === TRUE ASYNC
 For non-blocking connect use PG::EM::Client.async_connect and #async_reset for 
-asynchronous connection reset. As all other async methods they return deferrable object.
+asynchronous connection reset. Like other async methods they return deferrable object.
 Use #callback to obtain already connected Client object.
 
   EM.run do
