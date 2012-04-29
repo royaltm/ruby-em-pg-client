@@ -94,9 +94,11 @@ The greetz go to:
   end
 
 === AUTORECONNECTING IN ASYNC MODE
+Autoreconnecting is done in non-blocking manner using #async_reset internally.
 
   EM.run do
-    pg = PG::EM::Client.new dbname: 'test'
+    pg = PG::EM::Client.new dbname: 'test',
+          connect_timeout: 5, query_timeout: 50
     try_query = lambda do |&blk|
       pg.query('select * from foo') do |result|
         raise result if result.is_a? ::Exception
@@ -107,9 +109,7 @@ The greetz go to:
     try_query.call {
       system 'pg_ctl stop -m fast'
       system 'pg_ctl start -w'
-      EM.add_timer(1) do
-        try_query.call { EM.stop }
-      end
+      try_query.call { EM.stop }
     }
   end
 
@@ -152,10 +152,14 @@ proc. However you have to pass +Deferrable+ from the async callback to the
 caller. See +#on_autoreconnect+ docs for details.
 
 === TRUE ASYNC
+For non-blocking connect use PG::EM::Client.async_connect and #async_reset for 
+asynchronous connection reset. As all other async methods they return deferrable object.
+Use #callback to obtain already connected Client object.
 
   EM.run do
     pool = (1..10).map {
-      PG::EM::Client.async_connect dbname: 'test', connect_timeout: 5 }
+      PG::EM::Client.async_connect dbname: 'test',
+          connect_timeout: 5, query_timeout: 50 }
 
     togo = pool.length
 
@@ -172,6 +176,8 @@ caller. See +#on_autoreconnect+ docs for details.
   end
 
 === EM-Synchrony
+Under +em-synchrony+ PG::EM::Client.new is fully asynchronous and blocks only current fiber.
+This applies also to #reset.
 
   require 'em-synchrony/pg'
 
