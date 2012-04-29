@@ -177,7 +177,7 @@ Use #callback to obtain already connected Client object.
 
 === EM-Synchrony
 Under +em-synchrony+ PG::EM::Client.new is fully asynchronous and blocks only current fiber.
-This applies also to #reset.
+This also applies to #reset.
 
   require 'em-synchrony/pg'
 
