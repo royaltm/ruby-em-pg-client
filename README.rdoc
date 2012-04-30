@@ -34,7 +34,32 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 == INSTALL
 
-  $ sudo gem install em-pg-client
+=== Legacy
+
+  $ [sudo] gem install em-pg-client
+  
+==== Gemfile
+
+  # eventmachine
+  gem "em-pg-client", "~> 0.1.1", :require => 'pg/em'
+  # em-synchrony
+  gem "em-pg-client", "~> 0.1.1", :require => ['pg/em', 'em-synchrony/pg']
+
+=== Latest branch (fully-async)
+
+  $ [sudo] gem install em-pg-client --prerelease
+
+==== Gemfile
+
+  # eventmachine
+  gem "em-pg-client", "~> 0.2.0.pre", :require => 'pg/em'
+  # em-synchrony
+  gem "em-pg-client", "~> 0.2.0.pre", :require => ['pg/em', 'em-synchrony/pg']
+
+==== Github
+
+  git clone git://github.com/royaltm/ruby-em-pg-client.git
+  git checkout fully-async
 
 == WHY?
 
@@ -62,7 +87,7 @@ blocks when there is not enough buffered data on socket).
 
 This implementation makes use of non-blocking: PGConn#is_busy and PGConn#consume_input methods.
 Depending on size of result sets and concurrency level the gain in overall speed and responsiveness of your
-application might be actually quite huge. I already have done some tests[link:BENCHMARKS.rdoc].
+application might be actually quite huge. I've done some tests[link:BENCHMARKS.rdoc] already.
 
 == Thanks
 
