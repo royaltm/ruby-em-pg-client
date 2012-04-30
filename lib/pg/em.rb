@@ -54,10 +54,10 @@ module PG
     # - +async_reset+
     #
     # They are async equivalents of +Client.connect+ (which is also aliased
-    # by +PG::Connection+ as +new+, +open+, +setdb+, +setdblogin+) and +reset+.
+    # by PG::Connection as +new+, +open+, +setdb+, +setdblogin+) and +reset+.
     #
-    # Async methods might try to reset connection on connection error,
-    # you won't even notice that (except for warning message from PG).
+    # Async methods might try to reset connection on connection error.
+    # You won't even notice that (except for warning message from PG).
     # If you want to detect such event use +on_autoreconnect+ property.
     #
     # To disable such behavior set:
@@ -84,17 +84,18 @@ module PG
       # +Client.connect+ and +reset+.
       attr_accessor :connect_timeout
 
-      # (Experimental)
+      # (EXPERIMENTAL)
       # Aborts async command processing if waiting for response from server
       # exceedes +query_timeout+ seconds. This does not apply to
       # +Client.async_connect+ and +async_reset+. For those two use
       # +connect_timeout+ instead.
       #
-      # To enable it set to fractional seconds (> 0). To disable: set to 0.
+      # To enable it set to seconds (> 0). To disable: set to 0.
       # You can also specify this as initialization option.
       attr_accessor :query_timeout
 
-      # Enable/disable auto-reconnect feature (+true+/+false+). Default is +true+.
+      # Enable/disable auto-reconnect feature (+true+/+false+).
+      # Default is +true+.
       attr_accessor :async_autoreconnect
 
       # +on_autoreconnect+ is a user defined Proc that is called after a connection
