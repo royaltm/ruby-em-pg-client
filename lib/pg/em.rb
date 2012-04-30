@@ -77,8 +77,26 @@ module PG
     #
     class Client < PG::Connection
 
-      attr_accessor :async_autoreconnect, :connect_timeout, :query_timeout
-      
+
+      # Connection timeout. Changing this property only affects
+      # +Client.async_connect+ and +async_reset+.
+      # However if passed as initialization option also affects blocking
+      # +Client.connect+ and +reset+.
+      attr_accessor :connect_timeout
+
+      # (Experimental)
+      # Aborts async command processing if waiting for response from server
+      # exceedes +query_timeout+ seconds. This does not apply to
+      # +Client.async_connect+ and +async_reset+. For those two use
+      # +connect_timeout+ instead.
+      #
+      # To enable it set to fractional seconds (> 0). To disable: set to 0.
+      # You can also specify this as initialization option.
+      attr_accessor :query_timeout
+
+      # Enable/disable auto-reconnect feature (+true+/+false+). Default is +true+.
+      attr_accessor :async_autoreconnect
+
       # +on_autoreconnect+ is a user defined Proc that is called after a connection
       # with the server has been re-established.
       # It's invoked with +connection+ as first argument and original
@@ -119,6 +137,7 @@ module PG
             @timer = ::EM::Timer.new(timeout) do
               detach
               @client.async_command_aborted = true
+              IO.for_fd(@client.socket).close # break connection now (hack)
               @deferrable.protect do
                 raise PG::Error, "query timeout expired (async)"
               end
@@ -218,6 +237,13 @@ module PG
         async_args
       end
 
+      # Attempt connection asynchronously.
+      # Pass the same arguments as to +Client.new+.
+      #
+      # Returns +deferrable+. Use it's +callback+ to obtain newly created and
+      # already connected +Client+ object.
+      # If block is provided it's bound to +callback+ and +errback+ of returned
+      # +deferrable+.
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(*args)
@@ -229,6 +255,12 @@ module PG
         df
       end
 
+      # Attempt connection reset asynchronously.
+      # There are no arguments.
+      #
+      # Returns +deferrable+. Use it's +callback+ to handle success.
+      # If block is provided it's bound to +callback+ and +errback+ of returned
+      # +deferrable+.
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
@@ -244,6 +276,7 @@ module PG
         super(*args)
       end
 
+      # Perform autoreconnect. Used internally.
       def async_autoreconnect!(deferrable, error, &send_proc)
         if async_autoreconnect && (@async_command_aborted || self.status != PG::CONNECTION_OK)
           reset_df = async_reset
@@ -284,8 +317,8 @@ module PG
             ::EM.watch(self.socket, Watcher, self, df, send_proc).notify_readable = true
           end
           begin
+            raise PG::Error, "previous query expired, need connection reset" if @async_command_aborted
             send_proc.call
-            @async_command_aborted = false
           rescue PG::Error => e
             async_autoreconnect!(df, e, &send_proc)
           rescue Exception => e
