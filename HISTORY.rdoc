@@ -1,4 +1,8 @@
-next release
+0.2.0.pre.2
+- query_timeout now measures only network response timeout, 
+  so it's not fired for large datasets
+
+0.2.0.pre.1
 - added query_timeout feature for async query commands
 - added connect_timeout property with for async connect/reset
 - fix: async_autoreconnect for tcp/ip connections
@@ -6,6 +10,7 @@ next release
 - rework async_autoreconnect in fully async manner
 - added async_connect() and #async_reset()
 - API change: on_reconnect -> on_autoreconnect
+
 0.1.1
 - added on_reconnect callback
 - docs updated
