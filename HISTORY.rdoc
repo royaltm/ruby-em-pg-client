@@ -1,4 +1,5 @@
 0.2.0.pre.2
+- errors from consume_input fails deferrable
 - query_timeout now measures only network response timeout, 
   so it's not fired for large datasets
 
