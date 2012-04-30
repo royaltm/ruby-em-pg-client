@@ -18,7 +18,12 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 == BUGS/LIMITATIONS
 
-* actually no ActiveRecord or Sequel support (you are welcome to contribute).
+* actually no ActiveRecord nor Sequel support (you are welcome to contribute).
+
+== API Changes
+
+* +on_reconnect+ renamed to more accurate +on_autoreconnect+
+  (well, it's not used by +#reset+ call)
 
 == TODO:
 
@@ -179,7 +184,7 @@ caller. See +#on_autoreconnect+ docs for details.
 === TRUE ASYNC
 For non-blocking connect use PG::EM::Client.async_connect and #async_reset for 
 asynchronous connection reset. Like other async methods they return deferrable object.
-Use #callback to obtain already connected Client object.
+Use #callback to obtain already connected Client.
 
   EM.run do
     pool = (1..10).map {
@@ -280,7 +285,6 @@ This also applies to #reset.
     try_query.call
     system 'pg_ctl stop -m fast'
     system 'pg_ctl start -w'
-    EM::Synchrony.sleep(1)
     try_query.call
     EM.stop
   end

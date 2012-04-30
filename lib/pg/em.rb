@@ -47,8 +47,18 @@ module PG
     # which autodetects if EventMachine is running and uses appropriate
     # (async or sync) method version.
     #
+    # Additionally to the above, there are asynchronous methods defined for
+    # establishing connection and reseting it:
+    #
+    # - +Client.async_connect+
+    # - +async_reset+
+    #
+    # They are async equivalents of +Client.connect+ (which is also aliased
+    # by +PG::Connection+ as +new+, +open+, +setdb+, +setdblogin+) and +reset+.
+    #
     # Async methods might try to reset connection on connection error,
     # you won't even notice that (except for warning message from PG).
+    # If you want to detect such event use +on_autoreconnect+ property.
     #
     # To disable such behavior set:
     #   client.async_autoreconnect = false
@@ -96,7 +106,8 @@ module PG
       #   end
       #
       attr_accessor :on_autoreconnect
-      
+
+      # Used internally for marking connection as aborted on query timeout.
       attr_accessor :async_command_aborted
 
       module Watcher
