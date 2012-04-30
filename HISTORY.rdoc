@@ -1,4 +1,5 @@
 next release
+- added query_timeout feature for async query commands
 - added connect_timeout property with for async connect/reset
 - fix: async_autoreconnect for tcp/ip connections
 - fix: async_* does not raise errors; errors handled by deferrable
