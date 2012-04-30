@@ -52,7 +52,7 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 === Latest branch (fully-async)
 
-  $ [sudo] gem install em-pg-client --prerelease
+  $ [sudo] gem install em-pg-client --pre
 
 ==== Gemfile
 
