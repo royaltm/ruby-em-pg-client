@@ -135,31 +135,44 @@ module PG
           @deferrable = deferrable
           @send_proc = send_proc
           if (timeout = client.query_timeout) > 0
-            @timer = ::EM::Timer.new(timeout) do
+            @notify_timestamp = Time.now
+            setup_timer timeout
+          else
+            @timer = nil
+          end
+        end
+        
+        def setup_timer(timeout, adjustment = 0)
+          @timer = ::EM::Timer.new(timeout - adjustment) do
+            if (last_interval = Time.now - @notify_timestamp) >= timeout
               detach
               @client.async_command_aborted = true
               IO.for_fd(@client.socket).close # break connection now (hack)
               @deferrable.protect do
                 raise PG::Error, "query timeout expired (async)"
               end
+            else
+              setup_timer timeout, last_interval
             end
           end
         end
 
         def notify_readable
+          @notify_timestamp = Time.now if @timer
           @client.consume_input
-          return if @client.is_busy
-          @timer.cancel if @timer
-          detach
-          begin
-            result = @client.get_last_result
-          rescue PG::Error => e
-            @client.async_autoreconnect!(@deferrable, e, &@send_proc)
-          rescue Exception => e
-            @deferrable.fail(e)
+          result = if @client.is_busy
+            false
           else
-            @deferrable.succeed(result)
+            @timer.cancel if @timer
+            detach
+            @client.get_last_result
           end
+        rescue PG::Error => e
+          @client.async_autoreconnect!(@deferrable, e, &@send_proc)
+        rescue Exception => e
+          @deferrable.fail(e)
+        else
+          @deferrable.succeed(result) unless result == false
         end
       end
 
