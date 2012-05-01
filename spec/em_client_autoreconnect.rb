@@ -1,6 +1,5 @@
 $:.unshift "lib"
 require 'date'
-require 'readline'
 require 'eventmachine'
 require 'pg/em'
 
@@ -26,6 +25,19 @@ describe 'em-pg default autoreconnect' do
 
   it "should get database size using query after server restart" do
     system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @tested_proc.call
+  end
+
+  it "should not get database size using query after server shutdown" do
+    system($pgserver_cmd_stop).should be_true
+    @client.query('SELECT pg_database_size(current_database());') do |ex|
+      ex.should be_an_instance_of PG::Error
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should get database size using query after server startup" do
     system($pgserver_cmd_start).should be_true
     @tested_proc.call
   end

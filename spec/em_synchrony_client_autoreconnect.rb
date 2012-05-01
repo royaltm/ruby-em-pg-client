@@ -1,6 +1,5 @@
 $:.unshift "lib"
 require 'date'
-require 'readline'
 require 'em-synchrony'
 require 'em-synchrony/pg'
 
@@ -29,6 +28,18 @@ describe 'em-synchrony-pg default autoreconnect' do
 
   it "should get database size using query after server restart" do
     system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @tested_proc.call
+  end
+
+  it "should not get database size using query after server shutdown" do
+    system($pgserver_cmd_stop).should be_true
+    expect {
+      @tested_proc.call
+    }.to raise_error(PG::Error)
+  end
+
+  it "should get database size using query after server startup" do
     system($pgserver_cmd_start).should be_true
     @tested_proc.call
   end
