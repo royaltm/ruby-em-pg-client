@@ -20,10 +20,10 @@ module PG
         class_eval <<-EOD
           def #{name}(*args, &blk)
             if ::EM.reactor_running?
-              df = #{async_name}(*args)
               f = Fiber.current
-              df.callback { |res| f.resume(res) }
-              df.errback  { |err| f.resume(err) }
+              #{async_name}(*args) do |res|
+                f.resume(res)
+              end
 
               result = Fiber.yield
               raise result if result.is_a?(::Exception)
