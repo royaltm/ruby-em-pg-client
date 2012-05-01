@@ -6,6 +6,12 @@ require 'pg/em'
 
 describe PG::EM::Client do
 
+  it "should be client" do
+    @client.should be_an_instance_of described_class
+    EM.stop
+  end
+
+
   it "should create simple table `foo`" do
     @client.query('DROP TABLE IF EXISTS foo') do |result|
       result.should be_an_instance_of PG::Result
