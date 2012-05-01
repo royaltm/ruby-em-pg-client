@@ -1,5 +1,32 @@
 require 'pg'
 module PG
+  class Result
+    class << self
+      unless method_defined? :check_result
+        # pg_check_result is internal ext function. I whish it was rubified.
+        # https://bitbucket.org/ged/ruby-pg/issue/123/rubify-pg_check_result
+        def check_result(connection, result)
+          if result.nil?
+            if (error_message = connection.error_message)
+              error = PG::Error.new(error_message)
+            end
+          else
+            case result.result_status
+              when PG::PGRES_BAD_RESPONSE,
+                   PG::PGRES_FATAL_ERROR,
+                   PG::PGRES_NONFATAL_ERROR
+                error = PG::Error.new(result.error_message)
+                error.instance_variable_set('@result', result)
+            end
+          end
+          if error
+            error.instance_variable_set('@connection', connection)
+            raise error 
+          end
+        end
+      end
+    end
+  end
   module EM
     class FeaturedDeferrable < ::EM::DefaultDeferrable
       def initialize(&blk)
@@ -131,6 +158,7 @@ module PG
 
       module Watcher
         def initialize(client, deferrable, send_proc)
+          @last_result = nil
           @client = client
           @deferrable = deferrable
           @send_proc = send_proc
@@ -147,8 +175,12 @@ module PG
             if (last_interval = Time.now - @notify_timestamp) >= timeout
               detach
               @client.async_command_aborted = true
+              @client.consume_input
               IO.for_fd(@client.socket).close # break connection now (hack)
               @deferrable.protect do
+                while result = @client.get_result
+                  result.clear
+                end
                 raise PG::Error, "query timeout expired (async)"
               end
             else
@@ -158,21 +190,33 @@ module PG
         end
 
         def notify_readable
-          @notify_timestamp = Time.now if @timer
+          result = false
           @client.consume_input
-          result = if @client.is_busy
-            false
-          else
-            @timer.cancel if @timer
-            detach
-            @client.get_last_result
+          until @client.is_busy && !self.error?
+            break if (single_result = @client.get_result).nil?
+            @last_result.clear if @last_result
+            @last_result = single_result
           end
-        rescue PG::Error => e
-          @client.async_autoreconnect!(@deferrable, e, &@send_proc)
+          unless @client.is_busy
+            result = @last_result
+            Result.check_result(@client, result)
+            detach
+            @timer.cancel if @timer
+          end
         rescue Exception => e
-          @deferrable.fail(e)
+          detach
+          @timer.cancel if @timer
+          if e.is_a?(PG::Error)
+            @client.async_autoreconnect!(@deferrable, e, &@send_proc)
+          else
+            @deferrable.fail(e)
+          end
         else
-          @deferrable.succeed(result) unless result == false
+          if result == false
+            @notify_timestamp = Time.now if @timer
+          else
+            @deferrable.succeed(result) 
+          end
         end
       end
 
