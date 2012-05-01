@@ -1,9 +1,10 @@
 require 'pg'
 module PG
+
   class Result
     class << self
       unless method_defined? :check_result
-        # pg_check_result is internal ext function. I whish it was rubified.
+        # pg_check_result is internal ext function. I wish it was rubified.
         # https://bitbucket.org/ged/ruby-pg/issue/123/rubify-pg_check_result
         def check_result(connection, result)
           if result.nil?
@@ -27,6 +28,7 @@ module PG
       end
     end
   end
+
   module EM
     class FeaturedDeferrable < ::EM::DefaultDeferrable
       def initialize(&blk)
@@ -175,12 +177,8 @@ module PG
             if (last_interval = Time.now - @notify_timestamp) >= timeout
               detach
               @client.async_command_aborted = true
-              @client.consume_input
               IO.for_fd(@client.socket).close # break connection now (hack)
               @deferrable.protect do
-                while result = @client.get_result
-                  result.clear
-                end
                 raise PG::Error, "query timeout expired (async)"
               end
             else
