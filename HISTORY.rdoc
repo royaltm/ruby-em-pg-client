@@ -1,3 +1,11 @@
+next release
+- fix: leave connection in not busy state on query timeout
+- non-blocking results with multiple data query statements in one command
+- refine code in em-synchrony/pg
+- spec: more detailed tests
+- spec: async_connect
+- spec: autoreconnect
+
 0.2.0.pre.2
 - errors from consume_input fails deferrable
 - query_timeout now measures only network response timeout, 
