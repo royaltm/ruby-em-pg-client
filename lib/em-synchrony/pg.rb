@@ -15,7 +15,13 @@ module PG
       # - exec (aliased as query)
       # - exec_prepared
       # - prepare
-      %w(exec exec_prepared prepare reset self.connect).each do |name|
+      %w(exec
+         exec_prepared
+         prepare
+         describe_prepared
+         describe_portal
+         reset
+         self.connect).each do |name|
         async_name = "async_#{name.split('.').last}"
         class_eval <<-EOD
           def #{name}(*args, &blk)

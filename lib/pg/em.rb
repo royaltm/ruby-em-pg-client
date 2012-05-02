@@ -372,9 +372,11 @@ module PG
       end
 
       %w(
-        exec          send_query
-        prepare       send_prepare
-        exec_prepared send_query_prepared
+        exec              send_query
+        prepare           send_prepare
+        exec_prepared     send_query_prepared
+        describe_prepared send_describe_prepared
+        describe_portal   send_describe_portal
           ).each_slice(2) do |name, send_name|
 
         class_eval <<-EOD
