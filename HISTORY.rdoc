@@ -1,4 +1,5 @@
 next release
+- blocking #reset() should clear async_command_aborted flag
 - async_describe_portal + spec
 - async_describe_prepared + spec
 
