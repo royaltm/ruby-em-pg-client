@@ -333,6 +333,9 @@ module PG
         super(*args)
       end
 
+      # Return +CONNECTION_BAD+ for connections with +async_command_aborted+
+      # flag set by expired query timeout. Otherwise return whatever
+      # PG::Connection#status provides.
       def status
         if @async_command_aborted
           PG::CONNECTION_BAD
