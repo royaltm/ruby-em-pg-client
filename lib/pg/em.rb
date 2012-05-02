@@ -328,6 +328,12 @@ module PG
         df
       end
 
+      # Uncheck @async_command_aborted on blocking reset.
+      def reset
+        @async_command_aborted = false
+        super
+      end
+
       def initialize(*args)
         Client.parse_async_args(*args).each {|k, v| self.instance_variable_set(k, v) }
         super(*args)
