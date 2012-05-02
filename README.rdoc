@@ -27,6 +27,7 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 == TODO:
 
+* implement em version of get_copy_data and put_copy_data
 * em-synchrony ORM (ActiveRecord, Sequel and maybe Datamapper) support
   as separate projects
 
@@ -42,7 +43,7 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 === Legacy
 
   $ [sudo] gem install em-pg-client
-  
+
 ==== Gemfile
 
   # eventmachine
