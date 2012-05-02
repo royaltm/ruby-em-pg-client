@@ -150,7 +150,8 @@ module PG
       #
       # Example:
       #   pg.on_autoreconnect = proc do |conn, ex|
-      #     conn.prepare("birds_by_name", "select id, name from animals order by name where species=$1", ['birds'])
+      #     conn.prepare("species_by_name", 
+      #      "select id, name from animals where species=$1 order by name")
       #   end
       #
       attr_accessor :on_autoreconnect
