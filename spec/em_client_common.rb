@@ -20,6 +20,12 @@ module PGSpecMacros
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
 
+  def ensure_em_stop
+    yield
+  ensure
+    EM.stop
+  end
+
   module ClassMethods
     def it_should_execute(text, method, *args)
       it "should #{text}" do
@@ -60,8 +66,9 @@ shared_context 'em-pg common before' do
   end
 
   it "should be a client" do
-    @client.should be_an_instance_of described_class
-    EM.stop
+    ensure_em_stop do
+      @client.should be_an_instance_of described_class
+    end
   end
   
   it_should_begin
@@ -108,7 +115,7 @@ shared_context 'em-pg common after' do
     end
   end
   
-  it "should describe cursor with" do
+  it "should describe cursor with describe_portal" do
     pg_exec_and_check(@client, :describe_portal, 'foobar') do |result|
       result.nfields.should eq 3
       result.fname(0).should eq 'id'
@@ -150,6 +157,7 @@ shared_context 'em-pg common after' do
     pg_exec_and_check_with_error(@client, "query timeout expired", :query, 'SELECT pg_sleep(2)') do
       (Time.now - start_time).should be < 2
       @client.async_command_aborted.should be_true
+      @client.status.should be PG::CONNECTION_BAD
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
     end
@@ -171,6 +179,7 @@ shared_context 'em-pg common after' do
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
       @client.async_command_aborted.should be_false
+      @client.status.should be PG::CONNECTION_OK
     end
   end
 
@@ -186,8 +195,20 @@ shared_context 'em-pg common after' do
         'SELECT pg_sleep(2);' +
         'SELECT 42 number') do
       (Time.now - start_time).should be > 2
+      @client.async_command_aborted.should be_true
+      @client.status.should be PG::CONNECTION_BAD
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
+    end
+  end
+
+  it "should clear connection with blocking reset" do
+    ensure_em_stop do
+      @client.async_command_aborted.should be_true
+      @client.status.should be PG::CONNECTION_BAD
+      @client.reset
+      @client.async_command_aborted.should be_false
+      @client.status.should be PG::CONNECTION_OK
     end
   end
 

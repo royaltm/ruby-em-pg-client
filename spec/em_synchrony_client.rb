@@ -78,7 +78,7 @@ describe PG::EM::Client do
     end
   end
   
-  it "should describe cursor with" do
+  it "should describe cursor with describe_portal" do
     @client.describe_portal('foobar') do |result|
       result.should be_an_instance_of PG::Result
       result.nfields.should eq 3
@@ -145,6 +145,7 @@ describe PG::EM::Client do
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
     @client.async_command_aborted.should be_true
+    @client.status.should be PG::CONNECTION_BAD
   end
 
   it "should timeout not expire while executing query with partial results" do
@@ -164,6 +165,7 @@ describe PG::EM::Client do
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
       @client.async_command_aborted.should be_false
+      @client.status.should be PG::CONNECTION_OK
     end
   end
 
@@ -181,11 +183,24 @@ describe PG::EM::Client do
           'SELECT 42 number')
     }.to raise_error(PG::Error, /query timeout expired/)
     (Time.now - start_time).should be > 2
+    @client.async_command_aborted.should be_true
+    @client.status.should be PG::CONNECTION_BAD
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
   end
 
+  it "should clear connection with blocking reset" do
+    @after_em_stop = proc do
+      @client.async_command_aborted.should be_true
+      @client.status.should be PG::CONNECTION_BAD
+      @client.reset
+      @client.async_command_aborted.should be_false
+      @client.status.should be PG::CONNECTION_OK
+    end
+  end
+
   around(:each) do |testcase|
+    @after_em_stop = nil
     EM.synchrony do
       begin
         testcase.call
@@ -193,6 +208,7 @@ describe PG::EM::Client do
         EM.stop
       end
     end
+    @after_em_stop.call if @after_em_stop
   end
 
   before(:all) do
