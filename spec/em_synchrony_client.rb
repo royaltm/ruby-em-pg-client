@@ -9,10 +9,17 @@ describe PG::EM::Client do
     @client.should be_an_instance_of described_class
   end
 
-  it "should create simple table `foo`" do
+  it "should begin transaction" do
+    @client.query('BEGIN TRANSACTION').should be_an_instance_of PG::Result
+  end
+
+  it "should drop table `foo` if exists" do
     @client.query(
       'DROP TABLE IF EXISTS foo'
     ).should be_an_instance_of PG::Result
+  end
+  
+  it "should create simple table `foo`" do
     @client.query(
       'CREATE TABLE foo (id integer,cdate timestamp with time zone,data varchar)'
     ).should be_an_instance_of PG::Result
@@ -54,6 +61,35 @@ describe PG::EM::Client do
         row['data'].should == @values[i][0]
       end
     end
+  end
+
+  it "should declare cursor" do
+    @client.query(
+      'DECLARE foobar SCROLL CURSOR FOR SELECT * FROM foo'
+    ).should be_an_instance_of PG::Result
+  end
+
+  it "should fetch two rows from table" do
+    @client.query('FETCH FORWARD 2 FROM foobar') do |result|
+      result.should be_an_instance_of PG::Result
+      result.nfields.should eq 3
+      result.fname(0).should eq 'id'      
+      result.values.length.should eq 2
+    end
+  end
+  
+  it "should describe cursor with" do
+    @client.describe_portal('foobar') do |result|
+      result.should be_an_instance_of PG::Result
+      result.nfields.should eq 3
+      result.fname(0).should eq 'id'
+    end
+  end
+
+  it "should close cursor" do
+    @client.query(
+      'CLOSE foobar'
+    ).should be_an_instance_of PG::Result
   end
 
   it "should connect to database asynchronously" do
@@ -149,10 +185,6 @@ describe PG::EM::Client do
     @client.query_timeout.should eq 0
   end
 
-  it "should begin transaction" do
-    @client.query('BEGIN TRANSACTION').should be_an_instance_of PG::Result
-  end
-
   around(:each) do |testcase|
     EM.synchrony do
       begin
@@ -167,11 +199,9 @@ describe PG::EM::Client do
     @cdates = []
     @values = Array(('AA'..'ZZ').each_with_index)
     @client = described_class.new
-    @client.query 'BEGIN TRANSACTION'
   end
 
   after(:all) do
-    @client.query 'ROLLBACK TRANSACTION'
     @client.close
   end
 

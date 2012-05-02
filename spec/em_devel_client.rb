@@ -4,6 +4,9 @@ require 'date'
 require 'eventmachine'
 require 'pg/em'
 require 'em_client_common'
+RSpec.configure do |config|
+  config.include(PGSpecMacros)
+end
 
 describe PG::EM::Client do
 
