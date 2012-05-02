@@ -66,12 +66,16 @@ module PG
     # - +async_exec+ (alias: +async_query+)
     # - +async_prepare+
     # - +async_exec_prepared+
+    # - +async_describe_prepared+
+    # - +async_describe_portal+
     #
     # and following:
     #
     # - +exec+ (alias: +query+)
-    # - +exec_prepared+
     # - +prepare+
+    # - +exec_prepared+
+    # - +describe_prepared+
+    # - +describe_portal+
     #
     # which autodetects if EventMachine is running and uses appropriate
     # (async or sync) method version.
@@ -172,7 +176,7 @@ module PG
             @timer = nil
           end
         end
-        
+
         def setup_timer(timeout, adjustment = 0)
           @timer = ::EM::Timer.new(timeout - adjustment) do
             if (last_interval = Time.now - @notify_timestamp) >= timeout
