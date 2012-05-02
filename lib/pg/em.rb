@@ -332,9 +332,17 @@ module PG
         super(*args)
       end
 
+      def status
+        if @async_command_aborted
+          PG::CONNECTION_BAD
+        else
+          super
+        end
+      end
+
       # Perform autoreconnect. Used internally.
       def async_autoreconnect!(deferrable, error, &send_proc)
-        if async_autoreconnect && (@async_command_aborted || self.status != PG::CONNECTION_OK)
+        if async_autoreconnect && self.status != PG::CONNECTION_OK
           reset_df = async_reset
           reset_df.errback { |ex| deferrable.fail(ex) }
           reset_df.callback do
