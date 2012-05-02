@@ -1,6 +1,7 @@
-next release
+0.2.0.pre.3
 - #status() returns CONNECTION_BAD for connections with expired query
-- non-blocking results with multiple data query statements in one command
+- spec: query timeout expiration
+- non-blocking result processing for multiple data query statements sent at once
 - refine code in em-synchrony/pg
 - spec: more detailed tests
 - spec: async_connect
