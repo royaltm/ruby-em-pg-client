@@ -140,23 +140,23 @@ The greetz go to:
 ==== PG::Connection methods coverage
 The async methods for processing with EventMachine.
 
-1. async methods (always returning +Deferrable+ object):
+===== 1. async methods (always returning +Deferrable+ object):
 
-  - +Client.async_connect+
-  - +async_reset+
-  - +async_exec+ (alias: +async_query+)
-  - +async_prepare+
-  - +async_exec_prepared+
-  - +async_describe_prepared+
-  - +async_describe_portal+
+* +Client.async_connect+
+* +async_reset+
+* +async_exec+ (alias: +async_query+)
+* +async_prepare+
+* +async_exec_prepared+
+* +async_describe_prepared+
+* +async_describe_portal+
 
-2. async / blocking methods (returning +Deferrable+ only when EM is running):
+===== 2. async / blocking methods (returning +Deferrable+ only when EM is running):
 
-  - +exec+ (alias: +async_query+)
-  - +prepare+
-  - +exec_prepared+
-  - +describe_prepared+
-  - +describe_portal+
+* +exec+ (alias: +async_query+)
+* +prepare+
+* +exec_prepared+
+* +describe_prepared+
+* +describe_portal+
 
 Outside EventMachine event loop theese are regular PG::Connection blocking methods.
 
@@ -166,8 +166,9 @@ of returned +Deferrable+.
 ==== Special options
 There are 3 additional connection options and 1 standard +pg+ option used by
 async library (the additional ones are not passed to +pg+).
-You may add them as one of the *hash options* to Client.new or Client.async_connect
-or simply use accessor methods to change them on the fly.
+You may add them as one of the *hash* options to PG::EM::Client.new or
+PG::EM::Client.async_connect or simply use accessor methods to change them
+on the fly.
 
 The options are:
 
@@ -182,7 +183,7 @@ The options are:
   connection establishing and reset timeout
   
 Only +connect_timeout+ is a standard +libpq+ option. Although changing it by
-accessor method only affects asynchronous methods.
+accessor method only affects asynchronous functions.
 
 === AUTORECONNECTING IN ASYNC MODE
 Autoreconnecting is done in non-blocking manner using #async_reset internally.
