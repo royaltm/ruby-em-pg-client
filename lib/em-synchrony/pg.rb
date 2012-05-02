@@ -23,6 +23,13 @@ module PG
          reset
          self.connect).each do |name|
         async_name = "async_#{name.split('.').last}"
+        blocking_call = case name
+          when 'reset'
+            '@async_command_aborted = false
+              super(*args, &blk)'
+          else
+            'super(*args, &blk)'
+        end
         class_eval <<-EOD
           def #{name}(*args, &blk)
             if ::EM.reactor_running?
@@ -39,7 +46,7 @@ module PG
                 result
               end
             else
-              super(*args, &blk)
+              #{blocking_call}
             end
           end
         EOD
