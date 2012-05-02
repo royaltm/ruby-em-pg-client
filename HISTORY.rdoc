@@ -1,5 +1,5 @@
 next release
-- fix: leave connection in not busy state on query timeout
+- #status() returns CONNECTION_BAD for connections with expired query
 - non-blocking results with multiple data query statements in one command
 - refine code in em-synchrony/pg
 - spec: more detailed tests
