@@ -178,7 +178,6 @@ module PG
             if (last_interval = Time.now - @notify_timestamp) >= timeout
               detach
               @client.async_command_aborted = true
-              IO.for_fd(@client.socket).close # break connection now (hack)
               @deferrable.protect do
                 raise PG::Error, "query timeout expired (async)"
               end
