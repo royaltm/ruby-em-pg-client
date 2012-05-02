@@ -1,3 +1,7 @@
+next release
+- async_describe_portal + spec
+- async_describe_prepared + spec
+
 0.2.0.pre.3
 - #status() returns CONNECTION_BAD for connections with expired query
 - spec: query timeout expiration
