@@ -1,4 +1,29 @@
+module PGSpecMacros
+  def self.included(base)
+    base.extend(ClassMethods)
+  end
+  module ClassMethods
+    def it_should_rollback
+      it "should rollback transaction" do
+        @client.query('ROLLBACK') do |result|
+          result.should be_an_instance_of PG::Result
+          EM.stop
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      end
+    end
+    def it_should_begin
+      it "should begin new transaction" do
+        @client.query('BEGIN TRANSACTION') do |result|
+          result.should be_an_instance_of PG::Result
+          EM.stop
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      end
+    end
+  end
+end
+
 shared_context 'em-pg common before' do
+  include PGSpecMacros
 
   around(:each) do |testcase|
     EM.run &testcase
@@ -34,19 +59,34 @@ shared_context 'em-pg common before' do
 end
 
 shared_context 'em-pg common after' do
+  include PGSpecMacros
 
-  it "should read foo table with prepared statement" do
+  it "should create prepared statement" do
     @client.prepare('get_foo', 'SELECT * FROM foo order by id') do |result|
       result.should be_an_instance_of PG::Result
-      @client.exec_prepared('get_foo') do |result|
-        result.should be_an_instance_of PG::Result
-        result.each_with_index do |row, i|
-          row['id'].to_i.should == i
-          DateTime.parse(row['cdate']).should == @cdates[i]
-          row['data'].should == @values[i][0]
-        end
-        EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should describe prepared statement" do
+    @client.describe_prepared('get_foo') do |result|
+      result.should be_an_instance_of PG::Result
+      result.nfields.should eq 3
+      result.fname(0).should eq 'id'      
+      result.values.should be_empty
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should read foo table with prepared statement" do
+    @client.exec_prepared('get_foo') do |result|
+      result.should be_an_instance_of PG::Result
+      result.each_with_index do |row, i|
+        row['id'].to_i.should == i
+        DateTime.parse(row['cdate']).should == @cdates[i]
+        row['data'].should == @values[i][0]
+      end
+      EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
 
@@ -68,15 +108,11 @@ shared_context 'em-pg common after' do
     @client.query('SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number') do |result|
       result.should be_an_instance_of PG::Error
       result.to_s.should include "syntax error"
-      @client.query('ROLLBACK') do |result|
-        result.should be_an_instance_of PG::Result
-        @client.query('BEGIN TRANSACTION') do |result|
-          result.should be_an_instance_of PG::Result
-          EM.stop
-        end.should be_a_kind_of ::EM::DefaultDeferrable
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
+
+  it_should_rollback
 
   it "should return only last statement" do
     @client.query('SELECT * from pg_class; SELECT CURRENT_TIMESTAMP; SELECT 42 number') do |result|
@@ -98,10 +134,7 @@ shared_context 'em-pg common after' do
       @client.async_command_aborted.should be_true
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
-      @client.query('BEGIN TRANSACTION') do |result|
-        result.should be_an_instance_of PG::Result
-        EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
 
@@ -142,11 +175,10 @@ shared_context 'em-pg common after' do
       result.to_s.should include "query timeout expired"
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
-      @client.query('BEGIN TRANSACTION') do |result|
-        result.should be_an_instance_of PG::Result
-        EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
+
+  it_should_begin
 
 end

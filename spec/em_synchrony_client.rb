@@ -30,10 +30,22 @@ describe PG::EM::Client do
     results.each {|r| r.should be_an_instance_of DateTime }
   end
 
-  it "should read foo table with prepared statement" do
+  it "should create prepared statement" do
     @client.prepare('get_foo', 
       'SELECT * FROM foo order by id'
     ).should be_an_instance_of PG::Result
+  end
+
+  it "should describe prepared statement" do
+    @client.describe_prepared('get_foo') do |result|
+      result.should be_an_instance_of PG::Result
+      result.nfields.should eq 3
+      result.fname(0).should eq 'id'      
+      result.values.should be_empty
+    end
+  end
+
+  it "should read foo table with prepared statement" do
     @client.exec_prepared('get_foo') do |result|
       result.should be_an_instance_of PG::Result
       result.each_with_index do |row, i|
@@ -48,15 +60,18 @@ describe PG::EM::Client do
     this = :first
     f = Fiber.current
     Fiber.new do
-      conn = described_class.new
-      this = :second
-      conn.should be_an_instance_of described_class
-      conn.query('SELECT pg_database_size(current_database());') do |result|
-        result.should be_an_instance_of PG::Result
-        result[0]['pg_database_size'].to_i.should be > 0
+      begin
+        conn = described_class.new
+        this = :second
+        conn.should be_an_instance_of described_class
+        conn.query('SELECT pg_database_size(current_database());') do |result|
+          result.should be_an_instance_of PG::Result
+          result[0]['pg_database_size'].to_i.should be > 0
+        end
+        conn.close
+      ensure
+        f.resume
       end
-      conn.close
-      f.resume
     end.resume
     this.should be :first
     Fiber.yield
@@ -67,10 +82,10 @@ describe PG::EM::Client do
     expect {
       @client.query('SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number')
     }.to raise_error(PG::Error, /syntax error/)
+  end
+  
+  it "should rollback transaction" do
     @client.query('ROLLBACK') do |result|
-      result.should be_an_instance_of PG::Result
-    end
-    @client.query('BEGIN TRANSACTION') do |result|
       result.should be_an_instance_of PG::Result
     end
   end
@@ -94,9 +109,6 @@ describe PG::EM::Client do
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
     @client.async_command_aborted.should be_true
-    @client.query('BEGIN TRANSACTION') do |result|
-      result.should be_an_instance_of PG::Result
-    end
   end
 
   it "should timeout not expire while executing query with partial results" do
@@ -135,9 +147,10 @@ describe PG::EM::Client do
     (Time.now - start_time).should be > 2
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
-    @client.query('BEGIN TRANSACTION') do |result|
-      result.should be_an_instance_of PG::Result
-    end
+  end
+
+  it "should begin transaction" do
+    @client.query('BEGIN TRANSACTION').should be_an_instance_of PG::Result
   end
 
   around(:each) do |testcase|
