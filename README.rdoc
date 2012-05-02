@@ -113,8 +113,21 @@ The greetz go to:
   pq.query('select * from foo') do |result|
     puts Array(result).inspect
   end
-  
+
   # asynchronous
+  EM.run do
+    df = pq.query('select * from foo')
+    df.callback { |result|
+      puts Array(result).inspect
+      EM.stop
+    }
+    df.errback {|ex|
+      raise ex
+    }
+    puts "sent"
+  end
+
+  # alternatively
   EM.run do
     pq.query('select * from foo') do |result|
       raise result if result.is_a? ::Exception
@@ -123,6 +136,53 @@ The greetz go to:
     end
     puts "sent"
   end
+
+==== PG::Connection methods coverage
+The async methods for processing with EventMachine.
+
+1. async methods (always returning +Deferrable+ object):
+
+  - +Client.async_connect+
+  - +async_reset+
+  - +async_exec+ (alias: +async_query+)
+  - +async_prepare+
+  - +async_exec_prepared+
+  - +async_describe_prepared+
+  - +async_describe_portal+
+
+2. async / blocking methods (returning +Deferrable+ only when EM is running):
+
+  - +exec+ (alias: +async_query+)
+  - +prepare+
+  - +exec_prepared+
+  - +describe_prepared+
+  - +describe_portal+
+
+Outside EventMachine event loop theese are regular PG::Connection blocking methods.
+
+All above methods (1 & 2) accept code block which is attached to callback and errback hooks
+of returned +Deferrable+.
+
+==== Special options
+There are 3 additional connection options and 1 standard +pg+ option used by
+async library (the additional ones are not passed to +pg+).
+You may add them as one of the *hash options* to Client.new or Client.async_connect
+or simply use accessor methods to change them on the fly.
+
+The options are:
+
+- +async_autoreconnect+ (true/false with default +true+)
+  allows automatic connection reset when there was a problem with connection
+  to server
+- +on_autoreconnect+ (nil/Proc with default +nil+)
+  a hook which is called after auto-reconnecting
+- +query_timeout+ (Float/Fixnum with default +0+)
+  allows to set timout for query execution
+- +connect_timeout+ (Float/Fixnum with default +0+)
+  connection establishing and reset timeout
+  
+Only +connect_timeout+ is a standard +libpq+ option. Although changing it by
+accessor method only affects asynchronous methods.
 
 === AUTORECONNECTING IN ASYNC MODE
 Autoreconnecting is done in non-blocking manner using #async_reset internally.
