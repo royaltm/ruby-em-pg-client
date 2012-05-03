@@ -101,7 +101,9 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
   end
 
   it "should get database size using query after manual connection reset" do
+    @client.status.should be PG::CONNECTION_BAD
     @client.reset
+    @client.status.should be PG::CONNECTION_OK
     @tested_proc.call
   end
 

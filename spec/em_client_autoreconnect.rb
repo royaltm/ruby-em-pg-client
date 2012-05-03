@@ -104,8 +104,10 @@ describe 'em-pg with autoreconnect disabled' do
   end
 
   it "should get database size using query after async manual connection reset" do
+    @client.status.should be PG::CONNECTION_BAD
     @client.async_reset do |conn|
       conn.should be @client
+      @client.status.should be PG::CONNECTION_OK
       @tested_proc.call
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
