@@ -100,7 +100,7 @@ application might be actually quite huge. I've done some tests[link:BENCHMARKS.r
 The greetz go to:
 - Authors[https://bitbucket.org/ged/ruby-pg/wiki/Home#!copying] of +pg+ driver (especially for its async-api)
 - Francis Cianfrocca for great reactor framework (EventMachine[https://github.com/eventmachine/eventmachine])
-- Ilya Grigorik (igrigorik[https://github.com/igrigorik]) for (untangling)[http://www.igvita.com/2010/03/22/untangling-evented-code-with-ruby-fibers/] EM with Fibers
+- Ilya Grigorik (igrigorik[https://github.com/igrigorik]) for (untangling[http://www.igvita.com/2010/03/22/untangling-evented-code-with-ruby-fibers/]) EM with Fibers
 
 == USAGE
 
@@ -110,13 +110,13 @@ The greetz go to:
   
   # no async
   pg = PG::EM::Client.new dbname: 'test'
-  pq.query('select * from foo') do |result|
+  pg.query('select * from foo') do |result|
     puts Array(result).inspect
   end
 
   # asynchronous
   EM.run do
-    df = pq.query('select * from foo')
+    df = pg.query('select * from foo')
     df.callback { |result|
       puts Array(result).inspect
       EM.stop
@@ -129,7 +129,7 @@ The greetz go to:
 
   # alternatively
   EM.run do
-    pq.query('select * from foo') do |result|
+    pg.query('select * from foo') do |result|
       raise result if result.is_a? ::Exception
       puts Array(result).inspect
       EM.stop
@@ -137,12 +137,12 @@ The greetz go to:
     puts "sent"
   end
 
-==== PG::Connection methods coverage
+=== PG::Connection methods coverage for EventMachine
 The async methods for processing with EventMachine.
 
-===== 1. async methods (always returning +Deferrable+ object):
+==== 1. async methods (always returning +Deferrable+ object):
 
-* +Client.async_connect+
+* +Client.async_connect+ (singleton)
 * +async_reset+
 * +async_exec+ (alias: +async_query+)
 * +async_prepare+
@@ -150,37 +150,53 @@ The async methods for processing with EventMachine.
 * +async_describe_prepared+
 * +async_describe_portal+
 
-===== 2. async / blocking methods (returning +Deferrable+ only when EM is running):
+For calling arguments consult their original, blocking (without +async_+ prefix)
+counterparts in PG::Connection manual.
 
-* +exec+ (alias: +async_query+)
+Use +callback+ on the returned +Deferrable+ to receive result as it's
+argument. For PG::EM::Client.async_connect and +async_reset+ the +callback+
+argument is PG::EM::Client in connected state, ready for executing queries.
+The rest of them provides PG::Result. You need to +clear+ obtained
+PG::Result object yourself or leave it to +gc+.
+
+To detect failure in executed method use +errback+ on returned +Deferrable+.
+You should expect an instance of +Exception+ (usually PG::Error) as +errback+
+argument. You may check it's +backtrace+ to find origin of the error.
+
+==== 2. async / blocking methods (returning +Deferrable+ only when EM is running):
+
+* +exec+ (alias: +query+)
 * +prepare+
 * +exec_prepared+
 * +describe_prepared+
 * +describe_portal+
 
-Outside EventMachine event loop theese are regular PG::Connection blocking methods.
+Outside EventMachine event loop theese are regular, blocking PG::Connection methods.
 
-All above methods (1 & 2) accept code block which is attached to callback and errback hooks
-of returned +Deferrable+.
+All of them (1 & 2) accept block argument which is attached to callback and errback
+hooks of returned +Deferrable+.
+
+You may also mix async and blocking methods without closing the connection.
+You only need to start/stop EventMachine in between async calls.
 
 ==== Special options
 There are 3 additional connection options and 1 standard +pg+ option used by
-async library (the additional ones are not passed to +pg+).
+async methods (the additional ones are not passed to +libpq+).
 You may add them as one of the *hash* options to PG::EM::Client.new or
 PG::EM::Client.async_connect or simply use accessor methods to change them
 on the fly.
 
 The options are:
 
-- +async_autoreconnect+ (true/false with default +true+)
+- +async_autoreconnect+ (+true+/+false+ with default +true+)
   allows automatic connection reset when there was a problem with connection
-  to server
-- +on_autoreconnect+ (nil/Proc with default +nil+)
-  a hook which is called after auto-reconnecting
-- +query_timeout+ (Float/Fixnum with default +0+)
-  allows to set timout for query execution
-- +connect_timeout+ (Float/Fixnum with default +0+)
-  connection establishing and reset timeout
+  to server,
+- +on_autoreconnect+ (+nil+/+Proc+ with default +nil+)
+  a hook which is called after auto-reconnecting,
+- +query_timeout+ (+Float+/+Fixnum+ with default +0+)
+  allows to set timout for query execution,
+- +connect_timeout+ (+Float+/+Fixnum+ with default +0+)
+  connection establishing and reset timeout.
   
 Only +connect_timeout+ is a standard +libpq+ option. Although changing it by
 accessor method only affects asynchronous functions.
@@ -239,14 +255,14 @@ command is executed:
     end
   end
 
-As you can see it's possible to send async query from inside on_autoreconnect
+As you can see it's possible to send async query from inside +on_autoreconnect+
 proc. However you have to pass +Deferrable+ from the async callback to the
-caller. See +#on_autoreconnect+ docs for details.
+caller. See +on_autoreconnect+ docs for details.
 
 === TRUE ASYNC
-For non-blocking connect use PG::EM::Client.async_connect and #async_reset for 
-asynchronous connection reset. Like other async methods they return deferrable object.
-Use #callback to obtain already connected Client.
+For non-blocking connect use PG::EM::Client.async_connect and +async_reset+ for 
+asynchronous re-connect. Like other async methods they return deferrable object.
+Use #callback to obtain already connected PG::EM::Client.
 
   EM.run do
     pool = (1..10).map {
@@ -269,7 +285,9 @@ Use #callback to obtain already connected Client.
 
 === EM-Synchrony
 Under +em-synchrony+ PG::EM::Client.new is fully asynchronous and blocks only current fiber.
-This also applies to #reset.
+This also applies to +reset+.
+
+The +require+ string is "em-synchrony/pg" instead of "pg/em".
 
   require 'em-synchrony/pg'
 
@@ -280,6 +298,36 @@ This also applies to #reset.
     end
     EM.stop
   end
+
+==== PG::Connection methods coverage for EM-Synchrony
+All +async_*+ methods are exactly the same as in pure EventMachine version
+of PG::EM::Client.
+
+The fiber aware methods are:
+
+* +Client.connect+ (singleton, alias: +new+, +open+, +setdb+, +setdblogin+)
+* +reset+
+* +exec+ (alias: +query+)
+* +prepare+
+* +exec_prepared+
+* +describe_prepared+
+* +describe_portal+
+
+Under the hood, they call async counterparts of self and +yield+ from current
+fiber awaiting for the result. The PG::Result (or PG::EM::Client for +connect+
+and +reset+) is then returned to the caller. If code block was given it's
+executed with result as the argument. In that case the value of the block is
+returned instead and PG::Result is cleared (or in case of +connect+ or +reset+
+PG::EM::Client is being closed) after executing block. From single fiber point
+of view, they behave like regular blocking PG::Client methods.
+
+Each of them is also automatic, detecting if EventMachine is running.
+If called outside EM event loop they are exactly the original methods from
+PG::Connection.
+
+Like in pure EventMachine version you can mix async, fiber aware and
+blocking methods without finishing the connection. You only need to
+start/stop EventMachine in between async calls.
 
 ==== Handling errors
 

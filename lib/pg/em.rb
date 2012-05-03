@@ -81,7 +81,7 @@ module PG
     # (async or sync) method version.
     #
     # Additionally to the above, there are asynchronous methods defined for
-    # establishing connection and reseting it:
+    # establishing connection and re-connecting:
     #
     # - +Client.async_connect+
     # - +async_reset+
@@ -117,7 +117,7 @@ module PG
       # +Client.connect+ and +reset+.
       attr_accessor :connect_timeout
 
-      # (EXPERIMENTAL)
+      # *EXPERIMENTAL*
       # Aborts async command processing if waiting for response from server
       # exceedes +query_timeout+ seconds. This does not apply to
       # +Client.async_connect+ and +async_reset+. For those two use
@@ -139,14 +139,13 @@ module PG
       # Certain rules should apply to on_autoreconnect proc:
       #
       # - If proc returns +false+ (explicitly, +nil+ is ignored)
-      #   the original +exception+ is passed to +Defferable#fail+ and the send
-      #   query command is not invoked at all.
+      #   the original +exception+ is passed to Defferable's +errback+ and
+      #   the send query command is not invoked at all.
       # - If return value is an instance of exception it is passed to
-      #   +Defferable#fail+ and the send query command is not invoked at all.
+      #   Defferable's +errback+ and the send query command is not invoked at all.
       # - If return value responds to +callback+ and +errback+ methods
-      #   (like +Deferrable+), the send query command will be bound to this
-      #   deferrable's success callback. Otherwise the send query command is
-      #   called immediately after on_autoreconnect proc is executed.
+      #   the send query command will be bound to value's success +callback+
+      #   and the original Defferable's +errback+ or value's +errback+.
       # - Other return values are ignored and the send query command is called
       #   immediately after on_autoreconnect proc is executed.
       #
@@ -300,10 +299,10 @@ module PG
       # Attempt connection asynchronously.
       # Pass the same arguments as to +Client.new+.
       #
-      # Returns +deferrable+. Use it's +callback+ to obtain newly created and
-      # already connected +Client+ object.
+      # Returns +Deferrable+. Use it's +callback+ to obtain newly created and
+      # already connected EM::PG::Client object.
       # If block is provided it's bound to +callback+ and +errback+ of returned
-      # +deferrable+.
+      # +Deferrable+.
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(*args)
@@ -318,9 +317,9 @@ module PG
       # Attempt connection reset asynchronously.
       # There are no arguments.
       #
-      # Returns +deferrable+. Use it's +callback+ to handle success.
+      # Returns +Deferrable+. Use it's +callback+ to handle success.
       # If block is provided it's bound to +callback+ and +errback+ of returned
-      # +deferrable+.
+      # +Deferrable+.
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
@@ -331,7 +330,7 @@ module PG
         df
       end
 
-      # Uncheck @async_command_aborted on blocking reset.
+      # Uncheck async_command_aborted on blocking reset.
       def reset
         @async_command_aborted = false
         super
