@@ -284,10 +284,13 @@ Use #callback to obtain already connected PG::EM::Client.
   end
 
 === EM-Synchrony
-Under +em-synchrony+ PG::EM::Client.new is fully asynchronous and blocks only current fiber.
-This also applies to +reset+.
+There is special version of PG::EM::Client library for EM-Synchrony with
+fiber aware methods.
 
 The +require+ string is "em-synchrony/pg" instead of "pg/em".
+
+Under +em-synchrony+ PG::EM::Client.new is fully asynchronous and blocks
+only current fiber. This also applies to +reset+.
 
   require 'em-synchrony/pg'
 
@@ -319,10 +322,10 @@ and +reset+) is then returned to the caller. If code block was given it's
 executed with result as the argument. In that case the value of the block is
 returned instead and PG::Result is cleared (or in case of +connect+ or +reset+
 PG::EM::Client is being closed) after executing block. From single fiber point
-of view, they behave like regular blocking PG::Client methods.
+of view, they behave like regular blocking PG::Connection methods.
 
 Each of them is also automatic, detecting if EventMachine is running.
-If called outside EM event loop they are exactly the original methods from
+If called outside EM event loop they are exactly the original methods of
 PG::Connection.
 
 Like in pure EventMachine version you can mix async, fiber aware and
