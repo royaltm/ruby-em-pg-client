@@ -53,14 +53,17 @@ describe PG::EM::Client do
   end
 
   it "should read foo table with prepared statement" do
-    @client.exec_prepared('get_foo') do |result|
+    ret = @client.exec_prepared('get_foo') do |result|
       result.should be_an_instance_of PG::Result
       result.each_with_index do |row, i|
         row['id'].to_i.should == i
         DateTime.parse(row['cdate']).should == @cdates[i]
         row['data'].should == @values[i][0]
       end
+      result
     end
+    ret.should be_an_instance_of PG::Result
+    expect { ret.fields }.to raise_error(PG::Error, /result has been cleared/)
   end
 
   it "should declare cursor" do
@@ -70,12 +73,15 @@ describe PG::EM::Client do
   end
 
   it "should fetch two rows from table" do
-    @client.query('FETCH FORWARD 2 FROM foobar') do |result|
+    ret = @client.query('FETCH FORWARD 2 FROM foobar') do |result|
       result.should be_an_instance_of PG::Result
       result.nfields.should eq 3
       result.fname(0).should eq 'id'      
       result.values.length.should eq 2
+      result
     end
+    ret.should be_an_instance_of PG::Result
+    expect { ret.fields }.to raise_error(PG::Error, /result has been cleared/)
   end
   
   it "should describe cursor with describe_portal" do
@@ -97,14 +103,17 @@ describe PG::EM::Client do
     f = Fiber.current
     Fiber.new do
       begin
-        conn = described_class.new
-        this = :second
-        conn.should be_an_instance_of described_class
-        conn.query('SELECT pg_database_size(current_database());') do |result|
-          result.should be_an_instance_of PG::Result
-          result[0]['pg_database_size'].to_i.should be > 0
+        result = described_class.new do |conn|
+          this = :second
+          conn.should be_an_instance_of described_class
+          conn.query('SELECT pg_database_size(current_database());') do |result|
+            result.should be_an_instance_of PG::Result
+            result[0]['pg_database_size'].to_i.should be > 0
+          end
+          conn
         end
-        conn.close
+        result.should be_an_instance_of described_class
+        result.finished?.should be_true
       ensure
         f.resume
       end
