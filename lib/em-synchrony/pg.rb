@@ -24,11 +24,17 @@ module PG
          self.connect).each do |name|
         async_name = "async_#{name.split('.').last}"
         blocking_call = case name
-          when 'reset'
-            '@async_command_aborted = false
-              super(*args, &blk)'
-          else
-            'super(*args, &blk)'
+        when 'reset'
+          '@async_command_aborted = false
+            super(*args, &blk)'
+        else
+          'super(*args, &blk)'
+        end
+        clear_method = case name
+        when 'reset', 'self.connect'
+          'finish'
+        else
+          'clear'
         end
         class_eval <<-EOD
           def #{name}(*args, &blk)
@@ -41,7 +47,11 @@ module PG
               result = Fiber.yield
               raise result if result.is_a?(::Exception)
               if block_given?
-                yield result 
+                begin
+                  yield result
+                ensure
+                  result.#{clear_method}
+                end
               else
                 result
               end
