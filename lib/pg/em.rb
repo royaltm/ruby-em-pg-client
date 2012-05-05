@@ -287,6 +287,14 @@ module PG
                   @client.finish unless reconnecting?
                 end
               end
+              # mimic blocking connect behavior
+              unless Encoding.default_internal.nil? || reconnecting?
+                begin
+                  @client.internal_encoding = Encoding.default_internal
+                rescue EncodingError
+                  warn "warning: Failed to set the default_internal encoding to #{Encoding.default_internal}: '#{@client.error_message}'"
+                end
+              end
               @client
             end
           end

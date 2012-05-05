@@ -9,6 +9,10 @@ describe PG::EM::Client do
     @client.should be_an_instance_of described_class
   end
 
+  it "should have same internal and external encoding" do
+    @client.external_encoding.should be @client.internal_encoding
+  end
+
   it "should begin transaction" do
     @client.query('BEGIN TRANSACTION').should be_an_instance_of PG::Result
   end
@@ -100,12 +104,17 @@ describe PG::EM::Client do
 
   it "should connect to database asynchronously" do
     this = :first
+    Encoding.default_internal = Encoding::ISO_8859_1
     f = Fiber.current
     Fiber.new do
       begin
         result = described_class.new do |conn|
           this = :second
+          Encoding.default_internal = nil
           conn.should be_an_instance_of described_class
+          conn.external_encoding.should_not eq(conn.internal_encoding)
+          conn.internal_encoding.should be Encoding::ISO_8859_1
+          conn.get_client_encoding.should eq "LATIN1"
           conn.query('SELECT pg_database_size(current_database());') do |result|
             result.should be_an_instance_of PG::Result
             result[0]['pg_database_size'].to_i.should be > 0
@@ -114,6 +123,27 @@ describe PG::EM::Client do
         end
         result.should be_an_instance_of described_class
         result.finished?.should be_true
+      ensure
+        f.resume
+      end
+    end.resume
+    this.should be :first
+    Fiber.yield
+    this.should be :second
+  end
+
+  it "should connect without setting incompatible encoding" do
+    this = :first
+    Encoding.default_internal = Encoding::Emacs_Mule
+    f = Fiber.current
+    Fiber.new do
+      begin
+        described_class.new do |conn|
+          this = :second
+          Encoding.default_internal = nil
+          conn.should be_an_instance_of described_class
+          conn.external_encoding.should be conn.internal_encoding
+        end
       ensure
         f.resume
       end
@@ -223,6 +253,8 @@ describe PG::EM::Client do
   before(:all) do
     @cdates = []
     @values = Array(('AA'..'ZZ').each_with_index)
+    ENV['PGCLIENTENCODING'] = nil
+    Encoding.default_internal = nil
     @client = described_class.new
   end
 

@@ -58,6 +58,8 @@ shared_context 'em-pg common before' do
   before(:all) do
     @cdates = []
     @values = Array(('AA'..'ZZ').each_with_index)
+    ENV['PGCLIENTENCODING'] = nil
+    Encoding.default_internal = nil
     @client = described_class.new
   end
 
@@ -71,6 +73,12 @@ shared_context 'em-pg common before' do
     end
   end
   
+  it "should have same internal and external encoding" do
+    ensure_em_stop do
+      @client.external_encoding.should be @client.internal_encoding
+    end
+  end
+
   it_should_begin
 
   it_should_execute("drop table `foo` if exists",
@@ -126,12 +134,30 @@ shared_context 'em-pg common after' do
 
   it "should connect to database asynchronously" do
     this = :first
+    Encoding.default_internal = Encoding::ISO_8859_1
     described_class.async_connect do |conn|
       this = :second
+      Encoding.default_internal = nil
       conn.should be_an_instance_of described_class
+      conn.external_encoding.should_not eq(conn.internal_encoding)
+      conn.internal_encoding.should be Encoding::ISO_8859_1
+      conn.get_client_encoding.should eq "LATIN1"
       pg_exec_and_check(conn, :query, 'SELECT pg_database_size(current_database());') do |result|
         result[0]['pg_database_size'].to_i.should be > 0
       end
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+    this.should be :first
+  end
+
+  it "should connect without setting incompatible encoding" do
+    this = :first
+    Encoding.default_internal = Encoding::Emacs_Mule
+    described_class.async_connect do |conn|
+      this = :second
+      Encoding.default_internal = nil
+      conn.should be_an_instance_of described_class
+      conn.external_encoding.should be conn.internal_encoding
+      EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
     this.should be :first
   end
