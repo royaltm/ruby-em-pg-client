@@ -342,10 +342,7 @@ module PG
       # Special PG::EM::Client options (e.g.: +async_autoreconnect+) must be provided
       # as +connection_hash+ argument variant. They will be ignored in +connection_string+.
       # 
-      # *Important*
-      #
-      # The important difference is that +client_encoding+ will *not* be set for you
-      # according to Encoding.default_internal.
+      # +client_encoding+ *will* be set for you according to Encoding.default_internal.
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(*args)
@@ -385,9 +382,7 @@ module PG
       # Special PG::EM::Client options (e.g.: +async_autoreconnect+) must be provided
       # as +connection_hash+ argument variant. They will be ignored in +connection_string+.
       # 
-      # *Important*
-      #
-      # +em-synchrony+ version will *not* set +client_encoding+ for you according to
+      # +em-synchrony+ version *will* do set +client_encoding+ for you according to
       # Encoding.default_internal.
       def initialize(*args)
         Client.parse_async_args(*args).each {|k, v| self.instance_variable_set(k, v) }
