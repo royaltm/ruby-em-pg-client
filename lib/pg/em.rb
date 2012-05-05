@@ -249,7 +249,7 @@ module PG
                   raise PG::Error, "timeout expired (async)"
                 end
               ensure
-                @client.finish
+                @client.finish unless poll_method.intern == :reset
               end
             end
           end
