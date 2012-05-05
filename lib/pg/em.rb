@@ -1,4 +1,16 @@
-require 'pg'
+begin
+  require 'pg'
+rescue LoadError => error
+  raise 'Missing pg driver: gem install pg'
+end
+unless defined? EventMachine
+  begin
+    require 'eventmachine'
+  rescue LoadError => error
+    raise 'Missing EventMachine: gem install eventmachine'
+  end
+end
+
 module PG
 
   class Result
