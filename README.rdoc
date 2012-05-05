@@ -31,12 +31,14 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 * implement EM adapted version of get_copy_data and put_copy_data
 * em-synchrony ORM (ActiveRecord, Sequel and maybe Datamapper) support
   as separate projects
+* present more benchmarks
 
 == REQUIREMENTS
 
-* ruby >= 1.9
+* ruby >= 1.9 (tested: 1.9.1p378, 1.9.2-p280, 1.9.2-p320, 1.9.3-p194)
 * https://bitbucket.org/ged/ruby-pg (>= 0.13)
-* http://rubyeventmachine.com
+* PostgreSQL RDBMS >= 8.3
+* http://rubyeventmachine.com >= 0.12.10
 * (optional) EM-Synchrony[https://github.com/igrigorik/em-synchrony]
 
 == INSTALL
