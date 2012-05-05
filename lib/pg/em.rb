@@ -193,16 +193,16 @@ module PG
         def notify_readable
           result = false
           @client.consume_input
-          until @client.is_busy && !self.error?
-            break if (single_result = @client.get_result).nil?
+          until @client.is_busy
+            if (single_result = @client.get_result).nil?
+              result = @last_result
+              Result.check_result(@client, result)
+              detach
+              @timer.cancel if @timer
+              break
+            end
             @last_result.clear if @last_result
             @last_result = single_result
-          end
-          unless @client.is_busy
-            result = @last_result
-            Result.check_result(@client, result)
-            detach
-            @timer.cancel if @timer
           end
         rescue Exception => e
           detach
