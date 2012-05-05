@@ -249,10 +249,14 @@ module PG
                   raise PG::Error, "timeout expired (async)"
                 end
               ensure
-                @client.finish unless poll_method.intern == :reset
+                @client.finish unless reconnecting?
               end
             end
           end
+        end
+
+        def reconnecting?
+          @poll_method == :reset_poll
         end
 
         def notify_writable
@@ -276,7 +280,11 @@ module PG
             detach
             success = @deferrable.protect_and_succeed do
               unless @client.status == PG::CONNECTION_OK
-                raise PG::Error, @client.error_message
+                begin
+                  raise PG::Error, @client.error_message
+                ensure
+                  @client.finish unless reconnecting?
+                end
               end
               @client
             end
