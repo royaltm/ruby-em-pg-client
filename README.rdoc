@@ -24,7 +24,7 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 === 0.1.x -> 0.2.x
 * +on_reconnect+ renamed to more accurate +on_autoreconnect+
-  (well, it's not used by +PG::EM::Client#reset+ call)
+  (well, it's not used by PG::EM::Client#reset call)
 
 == TODO:
 
@@ -35,8 +35,8 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 == REQUIREMENTS
 
-* ruby >= 1.9 (tested: 1.9.1p378, 1.9.2-p280, 1.9.2-p320, 1.9.3-p194)
-* https://bitbucket.org/ged/ruby-pg (>= 0.13)
+* ruby >= 1.9 (tested: 1.9.3-p194, 1.9.2-p320, 1.9.2-p280, 1.9.1p378)
+* https://bitbucket.org/ged/ruby-pg >= 0.13
 * PostgreSQL RDBMS >= 8.3
 * http://rubyeventmachine.com >= 0.12.10
 * (optional) EM-Synchrony[https://github.com/igrigorik/em-synchrony]
@@ -289,12 +289,12 @@ Use #callback to obtain already connected PG::EM::Client.
 
 === Fibers / EM-Synchrony
 There is a special version of PG::EM::Client library with fiber aware methods
-for EM-Synchrony or other implementation of Fiber untangled EventMachine.
+for EM-Synchrony or other implementations of Fiber untangled EventMachine.
 
 The +require+ string is "em-synchrony/pg" instead of "pg/em".
 
-Under +em-synchrony+ PG::EM::Client.new is fully asynchronous and blocks
-only current fiber. This also applies to PG::EM::Client#reset.
++em-synchrony/pg+ version of PG::EM::Client.new is fully asynchronous and
+blocks only current fiber. This also applies to PG::EM::Client#reset.
 
   require 'em-synchrony'
   require 'em-synchrony/pg'
