@@ -1,10 +1,10 @@
 next release
-- nice dependency error
 - fix: finish connection on async connect_timeout
+- nice errors generated on missing dependencies
 - blocking #reset() should clear async_command_aborted flag
 - less calls to #is_busy in Watcher#notify_readable
-- async_describe_portal + spec
-- async_describe_prepared + spec
+- #async_describe_portal + specs
+- #async_describe_prepared + specs
 
 0.2.0.pre.3
 - #status() returns CONNECTION_BAD for connections with expired query
