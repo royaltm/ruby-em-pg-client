@@ -5,16 +5,20 @@ module PG
       # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
       # Licence:: MIT License
       #
-      # =PostgreSQL Client for EM-Synchrony
+      # =PostgreSQL Client for EM-Synchrony/Fibered EventMachine
       #
 
       # conform to *standard*
       alias_method :aquery, :async_query
 
-      # fiber untangled version of theese methods:
+      # fiber aware methods:
       # - exec (aliased as query)
       # - exec_prepared
       # - prepare
+      # - describe_prepared
+      # - describe_portal
+      # - reset
+      # - Client.connect
       %w(exec
          exec_prepared
          prepare

@@ -81,6 +81,8 @@ module PG
     # - +async_describe_prepared+
     # - +async_describe_portal+
     #
+    # which are suitable to run in EM event loop (they return +Deferrable+)
+    #
     # and following:
     #
     # - +exec+ (alias: +query+)
@@ -89,7 +91,7 @@ module PG
     # - +describe_prepared+
     # - +describe_portal+
     #
-    # which autodetects if EventMachine is running and uses appropriate
+    # autodetecting if EventMachine is running and using appropriate
     # (async or sync) method version.
     #
     # Additionally to the above, there are asynchronous methods defined for
@@ -101,7 +103,7 @@ module PG
     # They are async equivalents of +Client.connect+ (which is also aliased
     # by PG::Connection as +new+, +open+, +setdb+, +setdblogin+) and +reset+.
     #
-    # Async methods might try to reset connection on connection error.
+    # Async methods might try to re-connect on connection error.
     # You won't even notice that (except for warning message from PG).
     # If you want to detect such event use +on_autoreconnect+ property.
     #
@@ -111,13 +113,13 @@ module PG
     # or pass as new() hash argument:
     #   PG::EM::Client.new database: 'bar', async_autoreconnect: false
     #
-    # Otherwise nothing changes in PG::Connect API.
-    # See PG::Connect docs for arguments to above methods.
+    # Otherwise nothing changes in PG::Connection API.
+    # See PG::Connection docs for arguments to above methods.
     #
     # *Warning:*
     #
-    # +async_exec_prepared+ after +async_prepare+ should only be invoked on
-    # the *same* connection.
+    # +(async_)describe_prepared+ and +(async_)exec_prepared+ after
+    # +(async_)prepare+ should only be invoked on the *same* connection.
     # If you are using connection pool, make sure to acquire single connection first.
     #
     class Client < PG::Connection
@@ -130,6 +132,7 @@ module PG
       attr_accessor :connect_timeout
 
       # *EXPERIMENTAL*
+      #
       # Aborts async command processing if waiting for response from server
       # exceedes +query_timeout+ seconds. This does not apply to
       # +Client.async_connect+ and +async_reset+. For those two use
