@@ -73,7 +73,8 @@ module PG
     # Licence:: MIT License
     #
     #
-    # PG::EM::Client is a wrapper for PG::Connection which (re)defines methods:
+    # PG::EM::Client is a wrapper for PG::Connection[http://deveiate.org/code/pg/PG/Connection.html]
+    # which (re)defines methods:
     #
     # - +async_exec+ (alias: +async_query+)
     # - +async_prepare+
@@ -100,8 +101,9 @@ module PG
     # - +Client.async_connect+
     # - +async_reset+
     #
-    # They are async equivalents of +Client.connect+ (which is also aliased
-    # by PG::Connection as +new+, +open+, +setdb+, +setdblogin+) and +reset+.
+    # They are async equivalents of PG::Connection.connect (which is also
+    # aliased by PG::Connection as +new+, +open+, +setdb+, +setdblogin+) and
+    # +reset+.
     #
     # Async methods might try to re-connect on connection error.
     # You won't even notice that (except for warning message from PG).
@@ -114,29 +116,28 @@ module PG
     #   PG::EM::Client.new database: 'bar', async_autoreconnect: false
     #
     # Otherwise nothing changes in PG::Connection API.
-    # See PG::Connection docs for arguments to above methods.
+    # See PG::Connection[http://deveiate.org/code/pg/PG/Connection.html] docs
+    # for arguments to above methods.
     #
     # *Warning:*
     #
-    # +(async_)describe_prepared+ and +(async_)exec_prepared+ after
-    # +(async_)prepare+ should only be invoked on the *same* connection.
+    # +describe_prepared+ and +exec_prepared+ after
+    # +prepare+ should only be invoked on the *same* connection.
     # If you are using connection pool, make sure to acquire single connection first.
     #
     class Client < PG::Connection
 
 
       # Connection timeout. Changing this property only affects
-      # +Client.async_connect+ and +async_reset+.
+      # PG::EM::Client.async_connect and #async_reset.
       # However if passed as initialization option also affects blocking
-      # +Client.connect+ and +reset+.
+      # PG::EM::Client.new and #reset.
       attr_accessor :connect_timeout
 
-      # *EXPERIMENTAL*
-      #
       # Aborts async command processing if waiting for response from server
       # exceedes +query_timeout+ seconds. This does not apply to
-      # +Client.async_connect+ and +async_reset+. For those two use
-      # +connect_timeout+ instead.
+      # PG::EM::Client.async_connect and PG:EM::Client#async_reset. For them
+      # use +connect_timeout+ instead.
       #
       # To enable it set to seconds (> 0). To disable: set to 0.
       # You can also specify this as initialization option.
@@ -324,12 +325,19 @@ module PG
       end
 
       # Attempt connection asynchronously.
-      # Pass the same arguments as to +Client.new+.
-      #
+      # For args see PG::Connection.new[http://deveiate.org/code/pg/PG/Connection.html#method-c-new].
       # Returns +Deferrable+. Use it's +callback+ to obtain newly created and
-      # already connected EM::PG::Client object.
+      # already connected PG::EM::Client object.
       # If block is provided it's bound to +callback+ and +errback+ of returned
       # +Deferrable+.
+      #
+      # Special PG::EM::Client options (e.g.: +async_autoreconnect+) must be provided
+      # as +connection_hash+ argument variant. They will be ignored in +connection_string+.
+      # 
+      # *Important*
+      #
+      # The important difference is that +client_encoding+ will *not* be set for you
+      # according to Encoding.default_internal.
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(*args)
@@ -363,6 +371,16 @@ module PG
         super
       end
 
+      # Creates new instance of PG::EM::Client and attempts to establish connection.
+      # See PG::Connection.new[http://deveiate.org/code/pg/PG/Connection.html#method-c-new].
+      #
+      # Special PG::EM::Client options (e.g.: +async_autoreconnect+) must be provided
+      # as +connection_hash+ argument variant. They will be ignored in +connection_string+.
+      # 
+      # *Important*
+      #
+      # +em-synchrony+ version will *not* set +client_encoding+ for you according to
+      # Encoding.default_internal.
       def initialize(*args)
         Client.parse_async_args(*args).each {|k, v| self.instance_variable_set(k, v) }
         super(*args)
@@ -370,7 +388,7 @@ module PG
 
       # Return +CONNECTION_BAD+ for connections with +async_command_aborted+
       # flag set by expired query timeout. Otherwise return whatever
-      # PG::Connection#status provides.
+      # PG::Connection#status[http://deveiate.org/code/pg/PG/Connection.html#method-i-status] provides.
       def status
         if @async_command_aborted
           PG::CONNECTION_BAD

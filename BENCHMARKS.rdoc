@@ -6,7 +6,7 @@ The goal of the test is simply to retrieve (~80000) rows from table with a lot o
 The parallel method uses synchrony for simplicity.
 
 * +single+ is (eventmachine-less) job for retrieving a whole data table in
-  one query simple query "select * from resources"
+  one simple query "select * from resources"
 * +parallel+ chunk_row_count / concurrency] uses em-pg-client for retrieving
   result in chunks by +chunk_row_count+ rows and using +concurrency+ parallel
   connections

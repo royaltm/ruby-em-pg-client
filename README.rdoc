@@ -6,21 +6,22 @@ Author::    Rafał Michalski  (mailto:rafal@yeondir.com)
 
 == DESCRIPTION
 
-*em-pg-client* is a PostgreSQL EventMachine client wrapper for Ruby
-based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
+*em-pg-client* is the Ruby and EventMachine driver interface to the PostgreSQL
+RDBMS. It is based on ruby-pg[https://bitbucket.org/ged/ruby-pg].
 
 == FEATURES
 
-* non-blocking / asynchronous processing with EventMachine
-* fully async auto re-connects on connection loss (like server restarts)
-* minimal changes to PG::Connection API
-* EM-Synchrony[https://github.com/igrigorik/em-synchrony] support
+* Non-blocking / asynchronous processing with EventMachine,
+* fully async auto re-connects on connection losses (e.g.: RDBMS restarts),
+* minimal changes to PG::Connection[http://deveiate.org/code/pg/PG/Connection.html] API,
+* configurable timeouts (connect or execute) of asynchronous processing,
+* additional Fiber-aware version supporting EM-Synchrony[https://github.com/igrigorik/em-synchrony].
 
 == BUGS/LIMITATIONS
 
 * actually no ActiveRecord nor Sequel support (you are welcome to contribute).
 
-== API Changes
+== API Changes between versions
 
 === 0.1.x -> 0.2.x
 * +on_reconnect+ renamed to more accurate +on_autoreconnect+
@@ -35,9 +36,9 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 == REQUIREMENTS
 
-* ruby >= 1.9 (tested: 1.9.3-p194, 1.9.2-p320, 1.9.2-p280, 1.9.1p378)
+* ruby >= 1.9 (tested: 1.9.3-p194, 1.9.2-p320, 1.9.2-p280, 1.9.1-p378)
 * https://bitbucket.org/ged/ruby-pg >= 0.13
-* PostgreSQL RDBMS >= 8.3
+* PostgreSQL[http://www.postgresql.org/ftp/source/] RDBMS >= 8.3
 * http://rubyeventmachine.com >= 0.12.10
 * (optional) EM-Synchrony[https://github.com/igrigorik/em-synchrony]
 
@@ -72,7 +73,7 @@ based on ruby-pg[https://bitbucket.org/ged/ruby-pg]
 
 == WHY?
 
-Because I didn't find ruby-pg's EM implementation to fit my needs.
+Because I didn't find any ruby-pg's EM implementation to fit my needs.
 I've found at least 3 other implementations of EM postgres client:
 
 * https://github.com/jzimmek/em-postgresql-sequel
@@ -86,15 +87,19 @@ all of them have similiar flaws:
   so they are EM-Synchrony only,
 * non-standard API method names,
 * no (nonexistent or non-working) autoreconnect implementation,
+* poor error handling,
 * not fully supporting asynchronous PG::Connection API.
 
 The last one is worth some comment:
 
 They all use blocking methods to retrieve whole result from server
-(PGConn#block() or PGConn#get_result() which also
+(PGConn#block[http://deveiate.org/code/pg/PG/Connection.html#method-i-block] or
+PGConn#get_result[http://deveiate.org/code/pg/PG/Connection.html#method-i-get_result] which also
 blocks when there is not enough buffered data on socket).
 
-This implementation makes use of non-blocking: PGConn#is_busy and PGConn#consume_input methods.
+This implementation makes use of non-blocking:
+PGConn#is_busy[http://deveiate.org/code/pg/PG/Connection.html#method-i-is_busy] and
+PGConn#consume_input[http://deveiate.org/code/pg/PG/Connection.html#method-i-consume_input] methods.
 Depending on size of result sets and concurrency level the gain in overall speed and responsiveness of your
 application might be quite huge actually. I've done some tests[link:BENCHMARKS.rdoc] already.
 
@@ -106,6 +111,12 @@ The greetz go to:
 - Ilya Grigorik (igrigorik[https://github.com/igrigorik]) for (untangling[http://www.igvita.com/2010/03/22/untangling-evented-code-with-ruby-fibers/]) EM with Fibers
 
 == USAGE
++em-pg-client+ provides PG::EM::Client class which inherits
+PG::Connection[http://deveiate.org/code/pg/PG/Connection.html].
+You can work with PG::EM::Client almost the same way you would with
+PG::Connection.
+
+The real difference begins when you turn EventMachine reactor on.
 
 === BASIC
 
@@ -154,13 +165,13 @@ The list of PG::EM::Client async methods for processing with EventMachine.
 * +async_describe_portal+
 
 For calling arguments consult their original, blocking (without +async_+ prefix)
-counterparts in PG::Connection manual.
+counterparts in PG::Connection[http://deveiate.org/code/pg/PG/Connection.html] manual.
 
 Use +callback+ on the returned +Deferrable+ to receive result. For
 PG::EM::Client.async_connect and +async_reset+ the +callback+
 argument is PG::EM::Client in connected state, ready for executing queries.
-The rest of above methods provides PG::Result. You need to +clear+ obtained
-PG::Result object yourself or leave it to +gc+.
+The rest of above methods provides PG::Result[http://deveiate.org/code/pg/PG/Result.html].
+You need to +clear+ obtained PG::Result object yourself or leave that to +gc+.
 
 To detect failure in executed method use +errback+ on returned +Deferrable+.
 You should expect an instance of +Exception+ (usually PG::Error) as +errback+
