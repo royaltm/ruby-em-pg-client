@@ -243,9 +243,13 @@ module PG
           @poll_method = :"#{poll_method}_poll"
           if (timeout = client.connect_timeout) > 0
             @timer = ::EM::Timer.new(timeout) do
-              detach
-              @deferrable.protect do
-                raise PG::Error, "timeout expired (async)"
+              begin
+                detach
+                @deferrable.protect do
+                  raise PG::Error, "timeout expired (async)"
+                end
+              ensure
+                @client.finish
               end
             end
           end
