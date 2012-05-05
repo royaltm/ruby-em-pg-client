@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
   s.email = "rafal@yeondir.com"
   s.homepage = "http://github.com/royaltm/ruby-em-pg-client"
   s.require_path = "lib"
-  s.description = "PostgreSQL asynchronous EventMachine client (ruby-pg) wrapper"
+  s.description = "PostgreSQL asynchronous EventMachine client, based on pg interface (PG::Connection)"
   s.authors = ["Rafal Michalski"]
   s.files = `git ls-files`.split("\n") - ['.gitignore']
   s.test_files = Dir.glob("spec/**/*")
