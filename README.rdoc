@@ -83,7 +83,7 @@ I've found at least 3 other implementations of EM postgres client:
 and (except the EM-bundled one which uses no longer maintained postgres-pr library)
 all of them have similiar flaws:
 
-* 2 of them are designed to support some ORM (ActiveRecord or Sequel)
+* 2 of them are designed to support some ORM (ActiveRecord or Sequel),
   so they are EM-Synchrony only,
 * non-standard API method names,
 * no (nonexistent or non-working) autoreconnect implementation,
@@ -100,8 +100,9 @@ blocks when there is not enough buffered data on socket).
 This implementation makes use of non-blocking:
 PGConn#is_busy[http://deveiate.org/code/pg/PG/Connection.html#method-i-is_busy] and
 PGConn#consume_input[http://deveiate.org/code/pg/PG/Connection.html#method-i-consume_input] methods.
-Depending on size of result sets and concurrency level the gain in overall speed and responsiveness of your
-application might be quite huge actually. I've done some tests[link:BENCHMARKS.rdoc] already.
+Depending on the size of queries results and the level of concurrency, the gain in overall speed and
+responsiveness of your application might be actually quite huge. I've done some
+tests[link:BENCHMARKS.rdoc] already.
 
 == Thanks
 
@@ -164,18 +165,18 @@ The list of PG::EM::Client async methods for processing with EventMachine.
 * +async_describe_prepared+
 * +async_describe_portal+
 
-For calling arguments consult their original, blocking (without +async_+ prefix)
+For arguments of theese methods consult their original blocking (without +async_+ prefix)
 counterparts in PG::Connection[http://deveiate.org/code/pg/PG/Connection.html] manual.
 
-Use +callback+ on the returned +Deferrable+ to receive result. For
-PG::EM::Client.async_connect and +async_reset+ the +callback+
-argument is PG::EM::Client in connected state, ready for executing queries.
-The rest of above methods provides PG::Result[http://deveiate.org/code/pg/PG/Result.html].
-You need to +clear+ obtained PG::Result object yourself or leave that to +gc+.
+Use +callback+ on the returned +Deferrable+ to receive result. 
+The result you receive is PG::EM::Client for PG::EM::Client.async_connect
+and +async_reset+, and PG::Result[http://deveiate.org/code/pg/PG/Result.html] for the rest
+of the methods. The received PG::EM::Client is in a connected state and ready for queries.
+You need to +clear+ obtained PG::Result object yourself or leave it to +gc+.
 
-To detect failure in executed method use +errback+ on returned +Deferrable+.
+To detect a failure in an executed method use +errback+ on returned +Deferrable+.
 You should expect an instance of +Exception+ (usually PG::Error) as +errback+
-argument. You may check it's +backtrace+ to find origin of the error.
+argument. You may check its +backtrace+ to find origin of the error.
 
 ==== 2. Async / blocking methods (returning +Deferrable+ only when EM is running):
 
@@ -185,9 +186,10 @@ argument. You may check it's +backtrace+ to find origin of the error.
 * +describe_prepared+
 * +describe_portal+
 
-Outside EventMachine event loop theese are regular, blocking PG::Connection methods.
+Outside EventMachine's event loop these methods are regular, blocking PG::Connection
+methods.
 
-All of them (1 & 2) accept block argument which is attached to callback and errback
+All the methods (1 & 2) accept block argument which they attach to +callback+ and +errback+
 hooks of returned +Deferrable+.
 
 You may also mix async and blocking methods without closing the connection.
@@ -202,17 +204,17 @@ methods to change them on the fly. The additional options are not passed to
 
 The options are:
 
-- +async_autoreconnect+ (+true+/+false+ with default +true+)
+- +async_autoreconnect+ (+true+ / +false+ with default +true+)
   allows automatic re-connection when there was a problem with connection
-  to server,
-- +on_autoreconnect+ (+nil+/+Proc+ with default +nil+)
+  to the server,
+- +on_autoreconnect+ (+nil+ / +Proc+ with default +nil+)
   a hook which is called after auto-reconnecting,
-- +query_timeout+ (+Float+/+Fixnum+ with default +0+)
-  allows to set timout for query execution,
-- +connect_timeout+ (+Float+/+Fixnum+ with default +0+)
-  connection establishing and reset timeout.
-  
-Only +connect_timeout+ is a standard +libpq+ option. Although changing it by
+- +query_timeout+ (+Float+ / +Fixnum+ with default +0+)
+  allows to set timeout for query execution,
+- +connect_timeout+ (+Float+ / +Fixnum+ with default +0+)
+  connection establishing and resetting timeout.
+
+Only +connect_timeout+ is a standard +libpq+ option, although changing it by
 accessor method only affects asynchronous functions.
 
 === AUTORECONNECTING IN ASYNC MODE
@@ -276,8 +278,8 @@ caller. See PG::EM::Client#on_autoreconnect docs for details.
 === TRUE ASYNC
 For non-blocking connect use PG::EM::Client.async_connect and
 PG::EM::Client#async_reset for asynchronous re-connect. Like other async
-methods they return deferrable object.
-Use #callback to obtain already connected PG::EM::Client.
+methods they return +Deferrable+ object.
+Use Deferrable's #callback to obtain already connected PG::EM::Client.
 
   EM.run do
     pool = (1..10).map {
@@ -319,7 +321,7 @@ blocks only current fiber. This also applies to PG::EM::Client#reset.
   end
 
 Although em-synchrony[https://github.com/igrigorik/em-synchrony/] provides
-very nice set of tools for untangled EventMachine you don't really require
+very nice set of tools for untangled EventMachine, you don't really require
 it to fully benefit from this version of PG::EM::Client.
 
 ==== PG::Connection methods adapted to EM-Synchrony
@@ -339,9 +341,9 @@ The fiber aware methods are:
 * +describe_prepared+
 * +describe_portal+
 
-Under the hood, they call async counterparts of self and +yield+ from current
+Under the hood, these methods call async counterparts of themselves and +yield+ from current
 fiber awaiting for the result. The PG::Result (or PG::EM::Client for +connect+
-and +reset+) is then returned to the caller. If code block was given it's
+and +reset+) is then returned to the caller. If code block was given, it is
 executed with result as the argument. In that case the value of the block is
 returned instead and PG::Result is cleared (or in case of +connect+ or +reset+
 PG::EM::Client is being closed) after executing block. From single fiber point
