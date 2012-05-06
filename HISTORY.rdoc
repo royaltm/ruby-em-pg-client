@@ -1,4 +1,5 @@
 next release
+- async_connect sets #internal_encoding to Encoding.default_internal
 - fix: finish connection on async connect_timeout
 - nice errors generated on missing dependencies
 - blocking #reset() should clear async_command_aborted flag
