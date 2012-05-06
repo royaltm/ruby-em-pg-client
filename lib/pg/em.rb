@@ -92,7 +92,7 @@ module PG
     # - +describe_prepared+
     # - +describe_portal+
     #
-    # autodetecting if EventMachine is running and using appropriate
+    # autodetecting if EventMachine is running and using the appropriate
     # (async or sync) method version.
     #
     # Additionally to the above, there are asynchronous methods defined for
@@ -105,7 +105,7 @@ module PG
     # aliased by PG::Connection as +new+, +open+, +setdb+, +setdblogin+) and
     # +reset+.
     #
-    # Async methods might try to re-connect on connection error.
+    # Async methods might try to re-connect after a connection error.
     # You won't even notice that (except for warning message from PG).
     # If you want to detect such event use +on_autoreconnect+ property.
     #
@@ -123,14 +123,14 @@ module PG
     #
     # +describe_prepared+ and +exec_prepared+ after
     # +prepare+ should only be invoked on the *same* connection.
-    # If you are using connection pool, make sure to acquire single connection first.
+    # If you are using a connection pool, make sure to acquire single connection first.
     #
     class Client < PG::Connection
 
 
       # Connection timeout. Changing this property only affects
       # PG::EM::Client.async_connect and #async_reset.
-      # However if passed as initialization option also affects blocking
+      # However if passed as initialization option, it also affects blocking
       # PG::EM::Client.new and #reset.
       attr_accessor :connect_timeout
 
@@ -149,17 +149,17 @@ module PG
 
       # +on_autoreconnect+ is a user defined Proc that is called after a connection
       # with the server has been re-established.
-      # It's invoked with +connection+ as first argument and original
-      # +exception+ that caused the reconnecting process as second argument.
+      # It's invoked with two arguments. First one is the +connection+.
+      # The second is the original +exception+ that caused the reconnecting process.
       #
       # Certain rules should apply to on_autoreconnect proc:
       #
-      # - If proc returns +false+ (explicitly, +nil+ is ignored)
+      # - If proc returns +false+ (explicitly, +nil+ is ignored),
       #   the original +exception+ is passed to Defferable's +errback+ and
       #   the send query command is not invoked at all.
-      # - If return value is an instance of exception it is passed to
+      # - If return value is an instance of exception, it is passed to
       #   Defferable's +errback+ and the send query command is not invoked at all.
-      # - If return value responds to +callback+ and +errback+ methods
+      # - If return value responds to +callback+ and +errback+ methods,
       #   the send query command will be bound to value's success +callback+
       #   and the original Defferable's +errback+ or value's +errback+.
       # - Other return values are ignored and the send query command is called
@@ -332,11 +332,11 @@ module PG
         async_args
       end
 
-      # Attempt connection asynchronously.
+      # Attempts to establish the connection asynchronously.
       # For args see PG::Connection.new[http://deveiate.org/code/pg/PG/Connection.html#method-c-new].
-      # Returns +Deferrable+. Use it's +callback+ to obtain newly created and
+      # Returns +Deferrable+. Use its +callback+ to obtain newly created and
       # already connected PG::EM::Client object.
-      # If block is provided it's bound to +callback+ and +errback+ of returned
+      # If block is provided, it's bound to +callback+ and +errback+ of returned
       # +Deferrable+.
       #
       # Special PG::EM::Client options (e.g.: +async_autoreconnect+) must be provided
@@ -354,11 +354,11 @@ module PG
         df
       end
 
-      # Attempt connection reset asynchronously.
-      # There are no arguments.
+      # Attempts to reset the connection asynchronously.
+      # There are no arguments, except block argument.
       #
       # Returns +Deferrable+. Use it's +callback+ to handle success.
-      # If block is provided it's bound to +callback+ and +errback+ of returned
+      # If block is provided, it's bound to +callback+ and +errback+ of returned
       # +Deferrable+.
       def async_reset(&blk)
         @async_command_aborted = false
