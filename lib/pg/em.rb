@@ -105,15 +105,16 @@ module PG
     # aliased by PG::Connection as +new+, +open+, +setdb+, +setdblogin+) and
     # +reset+.
     #
-    # Async methods might try to re-connect after a connection error.
-    # You won't even notice that (except for warning message from PG).
+    # When +async_autoreconnect+ is +true+, async methods might try to
+    # re-connect after a connection error. You won't even notice that
+    # (except for warning message from PG).
     # If you want to detect such event use +on_autoreconnect+ property.
     #
-    # To disable such behavior set:
-    #   client.async_autoreconnect = false
+    # To enable auto-reconnecting set:
+    #   client.async_autoreconnect = true
     #
     # or pass as new() hash argument:
-    #   PG::EM::Client.new database: 'bar', async_autoreconnect: false
+    #   PG::EM::Client.new database: 'bar', async_autoreconnect: true
     #
     # Otherwise nothing changes in PG::Connection API.
     # See PG::Connection[http://deveiate.org/code/pg/PG/Connection.html] docs
@@ -144,7 +145,10 @@ module PG
       attr_accessor :query_timeout
 
       # Enable/disable auto-reconnect feature (+true+/+false+).
-      # Default is +true+.
+      # Defaults to +false+. However it is implicitly set to +true+
+      # if +on_autoreconnect+ is specified as initialization option.
+      # Changing +on_autoreconnect+ with accessor method doesn't change
+      # +async_autoreconnect+.
       attr_accessor :async_autoreconnect
 
       # +on_autoreconnect+ is a user defined Proc that is called after a connection
