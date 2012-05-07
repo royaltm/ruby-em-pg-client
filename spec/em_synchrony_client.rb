@@ -9,6 +9,15 @@ describe PG::EM::Client do
     @client.should be_an_instance_of described_class
   end
 
+  it "should have disabled async_autoreconnect" do
+    @client.async_autoreconnect.should be_false
+  end
+  
+  it "should enable async_autoreconnect" do
+    @client.async_autoreconnect = true
+    @client.async_autoreconnect.should be_true
+  end
+
   it "should have same internal and external encoding" do
     @client.external_encoding.should be @client.internal_encoding
   end

@@ -303,7 +303,7 @@ module PG
 
       def self.parse_async_args(*args)
         async_args = {
-          :@async_autoreconnect => true,
+          :@async_autoreconnect => nil,
           :@connect_timeout => 0,
           :@query_timeout => 0,
           :@on_autoreconnect => nil,
@@ -318,7 +318,10 @@ module PG
             when 'on_reconnect'
               raise ArgumentError.new("on_reconnect is no longer supported, use on_autoreconnect")
             when 'on_autoreconnect'
-              async_args[:@on_autoreconnect] = value if value.respond_to? :call
+              if value.respond_to? :call
+                async_args[:@on_autoreconnect] = value
+                async_args[:@async_autoreconnect] = true if async_args[:@async_autoreconnect].nil?
+              end
               true
             when 'connect_timeout'
               async_args[:@connect_timeout] = value.to_f
@@ -329,6 +332,7 @@ module PG
             end
           end
         end
+        async_args[:@async_autoreconnect] = false if async_args[:@async_autoreconnect].nil?
         async_args
       end
 

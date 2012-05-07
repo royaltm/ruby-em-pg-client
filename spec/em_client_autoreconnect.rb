@@ -50,7 +50,7 @@ describe 'em-pg default autoreconnect' do
         EM.stop
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
-    @client = PG::EM::Client.new
+    @client = PG::EM::Client.new(async_autoreconnect: true)
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
   end
 end
@@ -120,7 +120,7 @@ describe 'em-pg with autoreconnect disabled' do
         EM.stop
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
-    @client = PG::EM::Client.new(async_autoreconnect: false)
+    @client = PG::EM::Client.new
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
   end
 end

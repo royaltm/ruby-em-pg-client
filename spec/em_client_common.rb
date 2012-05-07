@@ -22,7 +22,6 @@ module PGSpecMacros
 
   def ensure_em_stop
     yield
-  ensure
     EM.stop
   end
 
@@ -52,7 +51,9 @@ end
 shared_context 'em-pg common before' do
 
   around(:each) do |testcase|
-    EM.run &testcase
+    EM.run do
+      EM.stop if testcase.call.is_a? Exception
+    end
   end
 
   before(:all) do
@@ -72,7 +73,44 @@ shared_context 'em-pg common before' do
       @client.should be_an_instance_of described_class
     end
   end
+
+  it "should have disabled async_autoreconnect" do
+    ensure_em_stop do
+      @client.async_autoreconnect.should be_false
+    end
+  end
   
+  it "should enable async_autoreconnect" do
+    ensure_em_stop do
+      @client.async_autoreconnect = true
+      @client.async_autoreconnect.should be_true
+    end
+  end
+
+  it "should set async_autoreconnect according to on_autoreconnect" do
+    ensure_em_stop do
+      on_autoreconnect = proc {|c, e| false }
+      async_args = described_class.parse_async_args
+      async_args.should be_an_instance_of Hash
+      async_args[:@on_autoreconnect].should be_nil
+      async_args[:@async_autoreconnect].should be_false
+      async_args = described_class.parse_async_args(on_autoreconnect: on_autoreconnect)
+      async_args.should be_an_instance_of Hash
+      async_args[:@on_autoreconnect].should be on_autoreconnect
+      async_args[:@async_autoreconnect].should be_true
+      async_args = described_class.parse_async_args(async_autoreconnect: false,
+        on_autoreconnect: on_autoreconnect)
+      async_args.should be_an_instance_of Hash
+      async_args[:@on_autoreconnect].should be on_autoreconnect
+      async_args[:@async_autoreconnect].should be_false
+      async_args = described_class.parse_async_args(on_autoreconnect: on_autoreconnect,
+        async_autoreconnect: false)
+      async_args.should be_an_instance_of Hash
+      async_args[:@on_autoreconnect].should be on_autoreconnect
+      async_args[:@async_autoreconnect].should be_false
+    end
+  end
+
   it "should have same internal and external encoding" do
     ensure_em_stop do
       @client.external_encoding.should be @client.internal_encoding
@@ -237,5 +275,4 @@ shared_context 'em-pg common after' do
       @client.status.should be PG::CONNECTION_OK
     end
   end
-
 end

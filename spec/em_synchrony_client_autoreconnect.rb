@@ -51,7 +51,7 @@ describe 'em-synchrony-pg default autoreconnect' do
         result[0]['pg_database_size'].to_i.should be > 0
       end
     end
-    @client = PG::EM::Client.new
+    @client = PG::EM::Client.new(async_autoreconnect: true)
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
   end
 end
@@ -114,7 +114,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
         result[0]['pg_database_size'].to_i.should be > 0
       end
     end
-    @client = PG::EM::Client.new(async_autoreconnect: false)
+    @client = PG::EM::Client.new
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
   end
 end
