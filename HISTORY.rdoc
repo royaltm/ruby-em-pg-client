@@ -1,4 +1,5 @@
-next release
+0.2.0
+- disabled async_autoreconnect by default unless on_autoreconnect is set
 - async_connect sets #internal_encoding to Encoding.default_internal
 - fix: finish connection on async connect_timeout
 - nice errors generated on missing dependencies
