@@ -22,7 +22,7 @@ RDBMS. It is based on ruby-pg[https://bitbucket.org/ged/ruby-pg].
 * no async support for: COPY commands (+get_copy_data+,  +put_copy_data+),
   +wait_for_notify+ and +transaction+
 * actually no ActiveRecord nor Sequel support (you are welcome to contribute).
-* doesn't work on Windows (#7)
+* doesn't work on Windows (issue #7)
 
 == API Changes between versions
 
@@ -36,7 +36,7 @@ RDBMS. It is based on ruby-pg[https://bitbucket.org/ged/ruby-pg].
 
 * implement EM adapted version of +get_copy_data+, +put_copy_data+,
   +wait_for_notify+ and +transaction+
-* add some fd/socket hackery to get it working on Windows (#7)
+* add some fd/socket hackery to get it working on Windows (issue #7)
 * em-synchrony ORM (ActiveRecord, Sequel and maybe Datamapper) support
   as separate projects
 * present more benchmarks
