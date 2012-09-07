@@ -43,8 +43,8 @@ RDBMS. It is based on ruby-pg[https://bitbucket.org/ged/ruby-pg].
 
 == REQUIREMENTS
 
-* ruby >= 1.9 (tested: 1.9.3-p194, 1.9.2-p320, 1.9.2-p280, 1.9.1-p378)
-* https://bitbucket.org/ged/ruby-pg >= 0.13
+* ruby >= 1.9 (tested: 1.9.3-p194, 1.9.2-p320, 1.9.1-p378)
+* https://bitbucket.org/ged/ruby-pg >= 0.13 (>= 0.14 recommended)
 * PostgreSQL[http://www.postgresql.org/ftp/source/] RDBMS >= 8.3
 * http://rubyeventmachine.com >= 0.12.10
 * (optional) EM-Synchrony[https://github.com/igrigorik/em-synchrony]
