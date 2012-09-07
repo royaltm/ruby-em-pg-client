@@ -44,7 +44,7 @@ RDBMS. It is based on ruby-pg[https://bitbucket.org/ged/ruby-pg].
 == REQUIREMENTS
 
 * ruby >= 1.9 (tested: 1.9.3-p194, 1.9.2-p320, 1.9.1-p378)
-* https://bitbucket.org/ged/ruby-pg >= 0.13 (>= 0.14 recommended)
+* https://bitbucket.org/ged/ruby-pg >= 0.13.2 (>= 0.14 recommended)
 * PostgreSQL[http://www.postgresql.org/ftp/source/] RDBMS >= 8.3
 * http://rubyeventmachine.com >= 0.12.10
 * (optional) EM-Synchrony[https://github.com/igrigorik/em-synchrony]
@@ -56,9 +56,9 @@ RDBMS. It is based on ruby-pg[https://bitbucket.org/ged/ruby-pg].
 ==== Gemfile
 
   # eventmachine
-  gem "em-pg-client", "~> 0.2.0", :require => 'pg/em'
+  gem "em-pg-client", "~> 0.2.1", :require => 'pg/em'
   # em-synchrony
-  gem "em-pg-client", "~> 0.2.0", :require => ['pg/em', 'em-synchrony/pg']
+  gem "em-pg-client", "~> 0.2.1", :require => ['pg/em', 'em-synchrony/pg']
 
 ==== Github
 
