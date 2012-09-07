@@ -1,3 +1,8 @@
+0.2.1
+- support for pg >= 0.14 native PG::Result#check
+- support for pg >= 0.14 native PG::Connection#set_default_encoding
+- fix: connection option Hash argument was modified by Client.new and Client.async_connect
+
 0.2.0
 - disabled async_autoreconnect by default unless on_autoreconnect is set
 - async_connect sets #internal_encoding to Encoding.default_internal
