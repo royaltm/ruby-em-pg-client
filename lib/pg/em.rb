@@ -187,10 +187,9 @@ module PG
           @client.consume_input
           until @client.is_busy
             if (single_result = @client.get_result).nil?
-              result = @last_result
-              if result.nil?
+              if (result = @last_result).nil?
                 error = PG::Error.new(@client.error_message)
-                error.instance_variable_set(:'@connection', @client)
+                error.instance_variable_set(:@connection, @client)
                 raise error
               end
               result.check
@@ -472,8 +471,8 @@ module PG
                PG::PGRES_FATAL_ERROR,
                PG::PGRES_NONFATAL_ERROR
             error = PG::Error.new(error_message)
-            error.instance_variable_set('@result', self)
-            error.instance_variable_set('@connection', @connection)
+            error.instance_variable_set(:@result, self)
+            error.instance_variable_set(:@connection, @connection)
             raise error
         end
       end
@@ -484,7 +483,7 @@ module PG
       class Client < PG::Connection
         def get_result(&blk)
           result = super(&blk)
-          result.instance_variable_set('@connection', self) unless block_given?
+          result.instance_variable_set(:@connection, self) unless block_given?
           result
         end
       end
