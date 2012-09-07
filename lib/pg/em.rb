@@ -283,7 +283,7 @@ module PG
           when PG::PGRES_POLLING_OK, PG::PGRES_POLLING_FAILED
             @timer.cancel if @timer
             detach
-            success = @deferrable.protect_and_succeed do
+            @deferrable.protect_and_succeed do
               unless @client.status == PG::CONNECTION_OK
                 begin
                   raise PG::Error, @client.error_message
@@ -305,7 +305,7 @@ module PG
         end
       end
 
-      def self.parse_async_args(*args)
+      def self.parse_async_args(args)
         async_args = {
           :@async_autoreconnect => nil,
           :@connect_timeout => 0,
@@ -314,7 +314,7 @@ module PG
           :@async_command_aborted => false,
         }
         if args.last.is_a? Hash
-          args.last.reject! do |key, value|
+          args[-1] = args.last.reject do |key, value|
             case key.to_s
             when 'async_autoreconnect'
               async_args[:@async_autoreconnect] = !!value
@@ -353,7 +353,7 @@ module PG
       # +client_encoding+ *will* be set for you according to Encoding.default_internal.
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
-        async_args = parse_async_args(*args)
+        async_args = parse_async_args(args)
         conn = df.protect { connect_start(*args) }
         if conn
           async_args.each {|k, v| conn.instance_variable_set(k, v) }
@@ -393,7 +393,7 @@ module PG
       # +em-synchrony+ version *will* do set +client_encoding+ for you according to
       # Encoding.default_internal.
       def initialize(*args)
-        Client.parse_async_args(*args).each {|k, v| self.instance_variable_set(k, v) }
+        Client.parse_async_args(args).each {|k, v| self.instance_variable_set(k, v) }
         super(*args)
       end
 

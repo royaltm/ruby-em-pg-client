@@ -90,21 +90,27 @@ shared_context 'em-pg common before' do
   it "should set async_autoreconnect according to on_autoreconnect" do
     ensure_em_stop do
       on_autoreconnect = proc {|c, e| false }
-      async_args = described_class.parse_async_args
+      async_args = described_class.parse_async_args([])
       async_args.should be_an_instance_of Hash
       async_args[:@on_autoreconnect].should be_nil
       async_args[:@async_autoreconnect].should be_false
-      async_args = described_class.parse_async_args(on_autoreconnect: on_autoreconnect)
+      args = [on_autoreconnect: on_autoreconnect]
+      async_args = described_class.parse_async_args(args)
+      args.should eq [{}]
       async_args.should be_an_instance_of Hash
       async_args[:@on_autoreconnect].should be on_autoreconnect
       async_args[:@async_autoreconnect].should be_true
-      async_args = described_class.parse_async_args(async_autoreconnect: false,
-        on_autoreconnect: on_autoreconnect)
+      args = [async_autoreconnect: false,
+        on_autoreconnect: on_autoreconnect]
+      async_args = described_class.parse_async_args(args)
+      args.should eq [{}]
       async_args.should be_an_instance_of Hash
       async_args[:@on_autoreconnect].should be on_autoreconnect
       async_args[:@async_autoreconnect].should be_false
-      async_args = described_class.parse_async_args(on_autoreconnect: on_autoreconnect,
-        async_autoreconnect: false)
+      args = [on_autoreconnect: on_autoreconnect,
+        async_autoreconnect: false]
+      async_args = described_class.parse_async_args(args)
+      args.should eq [{}]
       async_args.should be_an_instance_of Hash
       async_args[:@on_autoreconnect].should be on_autoreconnect
       async_args[:@async_autoreconnect].should be_false

@@ -25,6 +25,7 @@ task :test, [:which] do |t, args|
   end
 
   if %w[all unsafe dangerous autoreconnect].include? args[:which]
+    raise "Set PGDATA environment variable before running the autoreconnect tests." unless ENV['PGDATA']
     %w[
       spec/em_client_autoreconnect.rb
       spec/em_synchrony_client_autoreconnect.rb

@@ -22,6 +22,10 @@ end
 describe 'em-synchrony-pg default autoreconnect' do
   include_context 'em-synchrony-pg common'
 
+  it "should not have modified argument Hash" do
+    @options.should eq(async_autoreconnect: true)
+  end
+
   it "should get database size using query" do
     @tested_proc.call
   end
@@ -51,13 +55,18 @@ describe 'em-synchrony-pg default autoreconnect' do
         result[0]['pg_database_size'].to_i.should be > 0
       end
     end
-    @client = PG::EM::Client.new(async_autoreconnect: true)
+    @options = {async_autoreconnect: true}
+    @client = PG::EM::Client.new(@options)
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
   end
 end
 
 describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
   include_context 'em-synchrony-pg common'
+
+  it "should not have modified argument Hash" do
+    @options.should eq(on_autoreconnect: @on_autoreconnect)
+  end
 
   it "should get database size using prepared statement" do
     @tested_proc.call
@@ -76,12 +85,13 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
         result[0]['pg_database_size'].to_i.should be > 0
       end
     end
-    on_autoreconnect = proc do |client, ex|
+    @on_autoreconnect = proc do |client, ex|
       client.prepare('get_db_size', 'SELECT pg_database_size(current_database());')
     end
-    @client = PG::EM::Client.new(on_autoreconnect: on_autoreconnect)
+    @options = {on_autoreconnect: @on_autoreconnect}
+    @client = PG::EM::Client.new(@options)
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
-    on_autoreconnect.call @client
+    @on_autoreconnect.call @client
   end
 end
 

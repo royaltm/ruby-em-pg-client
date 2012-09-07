@@ -19,6 +19,14 @@ end
 describe 'em-pg default autoreconnect' do
   include_context 'em-pg common'
 
+  it "should not have modified argument Hash" do
+    begin
+      @options.should eq(async_autoreconnect: true)
+    ensure
+      EM.stop
+    end
+  end
+
   it "should get database size using query" do
     @tested_proc.call
   end
@@ -50,13 +58,22 @@ describe 'em-pg default autoreconnect' do
         EM.stop
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
-    @client = PG::EM::Client.new(async_autoreconnect: true)
+    @options = {async_autoreconnect: true}
+    @client = PG::EM::Client.new(@options)
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
   end
 end
 
 describe 'em-pg autoreconnect with on_autoreconnect' do
   include_context 'em-pg common'
+
+  it "should not have modified argument Hash" do
+    begin
+      @options.should eq(on_autoreconnect: @on_autoreconnect)
+    ensure
+      EM.stop
+    end
+  end
 
   it "should get database size using prepared statement"do
     @tested_proc.call
@@ -76,12 +93,13 @@ describe 'em-pg autoreconnect with on_autoreconnect' do
         EM.stop
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
-    on_autoreconnect = proc do |client, ex|
+    @on_autoreconnect = proc do |client, ex|
       df = client.prepare('get_db_size', 'SELECT pg_database_size(current_database());')
       df.should be_a_kind_of ::EM::DefaultDeferrable
       df
     end
-    @client = PG::EM::Client.new(on_autoreconnect: on_autoreconnect)
+    @options = {on_autoreconnect: @on_autoreconnect}
+    @client = PG::EM::Client.new(@options)
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}
     @client.prepare('get_db_size', 'SELECT pg_database_size(current_database());')
   end
