@@ -13,34 +13,6 @@ end
 
 module PG
 
-  class Result
-    class << self
-      unless method_defined? :check_result
-        # pg_check_result is internal ext function. I wish it was rubified.
-        # https://bitbucket.org/ged/ruby-pg/issue/123/rubify-pg_check_result
-        def check_result(connection, result)
-          if result.nil?
-            if (error_message = connection.error_message)
-              error = PG::Error.new(error_message)
-            end
-          else
-            case result.result_status
-              when PG::PGRES_BAD_RESPONSE,
-                   PG::PGRES_FATAL_ERROR,
-                   PG::PGRES_NONFATAL_ERROR
-                error = PG::Error.new(result.error_message)
-                error.instance_variable_set('@result', result)
-            end
-          end
-          if error
-            error.instance_variable_set('@connection', connection)
-            raise error 
-          end
-        end
-      end
-    end
-  end
-
   module EM
     class FeaturedDeferrable < ::EM::DefaultDeferrable
       def initialize(&blk)
@@ -216,7 +188,12 @@ module PG
           until @client.is_busy
             if (single_result = @client.get_result).nil?
               result = @last_result
-              Result.check_result(@client, result)
+              if result.nil?
+                error = PG::Error.new(@client.error_message)
+                error.instance_variable_set(:'@connection', @client)
+                raise error
+              end
+              result.check
               detach
               @timer.cancel if @timer
               break
@@ -292,13 +269,7 @@ module PG
                 end
               end
               # mimic blocking connect behavior
-              unless Encoding.default_internal.nil? || reconnecting?
-                begin
-                  @client.internal_encoding = Encoding.default_internal
-                rescue EncodingError
-                  warn "warning: Failed to set the default_internal encoding to #{Encoding.default_internal}: '#{@client.error_message}'"
-                end
-              end
+              @client.set_default_encoding unless reconnecting?
               @client
             end
           end
@@ -476,6 +447,48 @@ module PG
 
       alias_method :query, :exec
       alias_method :async_query, :async_exec
+
+      # support for pg < 0.14.0
+      unless method_defined? :set_default_encoding
+        def set_default_encoding
+          unless Encoding.default_internal.nil?
+            self.internal_encoding = Encoding.default_internal
+          end
+        rescue EncodingError
+          warn "warning: Failed to set the default_internal encoding to #{Encoding.default_internal}: '#{self.error_message}'"
+          Encoding.default_internal
+        end
+      end
+
     end
   end
+
+  # support for pg < 0.14.0
+  unless Result.method_defined? :check
+    class Result
+      def check
+        case result_status
+          when PG::PGRES_BAD_RESPONSE,
+               PG::PGRES_FATAL_ERROR,
+               PG::PGRES_NONFATAL_ERROR
+            error = PG::Error.new(error_message)
+            error.instance_variable_set('@result', self)
+            error.instance_variable_set('@connection', @connection)
+            raise error
+        end
+      end
+      alias_method :check_result, :check
+    end
+
+    module EM
+      class Client < PG::Connection
+        def get_result(&blk)
+          result = super(&blk)
+          result.instance_variable_set('@connection', self) unless block_given?
+          result
+        end
+      end
+    end
+  end
+
 end

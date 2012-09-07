@@ -8,8 +8,10 @@ desc "Run spec tests"
 task :test, [:which] do |t, args|
   args.with_defaults(:which => 'safe')
 
-  env_unix_socket = {'PGDATABASE' => 'test', 'PGHOST' => '/tmp'}
-  env_tcpip = {'PGDATABASE' => 'test', 'PGHOST' => 'localhost'}
+  env_common = {'PGDATABASE' => 'test'}
+  env_pg_013 = {'EM_PG_CLIENT_TEST_PG_VERSION' => '= 0.13.2'}
+  env_unix_socket = env_common.merge('PGHOST' => '/tmp')
+  env_tcpip = env_common.merge('PGHOST' => 'localhost')
 
   puts "WARNING: The test needs to be run with an available local PostgreSQL server"
 
@@ -21,6 +23,8 @@ task :test, [:which] do |t, args|
     ].each do |spec|
       sh env_unix_socket, "rspec #{spec}"
       sh env_tcpip, "rspec #{spec}"
+      sh env_pg_013.merge(env_unix_socket), "rspec #{spec}"
+      sh env_pg_013.merge(env_tcpip), "rspec #{spec}"
     end
   end
 

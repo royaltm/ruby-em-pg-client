@@ -1,11 +1,12 @@
 $:.unshift "lib"
+gem 'pg', ENV['EM_PG_CLIENT_TEST_PG_VERSION']
 require 'date'
 require 'em-synchrony'
 require 'em-synchrony/pg'
 
 describe PG::EM::Client do
 
-  it "should be client" do
+  it "should be client #{PG::VERSION}" do
     @client.should be_an_instance_of described_class
   end
 

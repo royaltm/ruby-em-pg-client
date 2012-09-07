@@ -68,7 +68,7 @@ shared_context 'em-pg common before' do
     @client.close
   end
 
-  it "should be a client" do
+  it "should be a client #{PG::VERSION}" do
     ensure_em_stop do
       @client.should be_an_instance_of described_class
     end
