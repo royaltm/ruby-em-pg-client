@@ -9,7 +9,7 @@ module PG
       #
 
       # conform to *standard*
-      alias_method :aquery, :async_query
+      alias_method :aquery, :em_query
 
       # fiber aware methods:
       # - exec (aliased as query)
@@ -26,7 +26,7 @@ module PG
          describe_portal
          reset
          self.connect).each do |name|
-        async_name = "async_#{name.split('.').last}"
+        async_name = "em_#{name.split('.').last}"
         blocking_call = case name
         when 'reset'
           '@async_command_aborted = false
@@ -40,7 +40,7 @@ module PG
         else
           'clear'
         end
-        class_eval <<-EOD
+        class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
             if ::EM.reactor_running?
               f = Fiber.current
@@ -64,6 +64,9 @@ module PG
             end
           end
         EOD
+        if name != 'self.connect'
+          alias_method "async_#{name}", name
+        end
       end
 
       class << self
