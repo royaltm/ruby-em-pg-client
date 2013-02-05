@@ -204,7 +204,7 @@ module PG
           detach
           @timer.cancel if @timer
           if e.is_a?(PG::Error)
-            @client.async_autoreconnect!(@deferrable, e, &@send_proc)
+            @client.em_autoreconnect!(@deferrable, e, &@send_proc)
           else
             @deferrable.fail(e)
           end
@@ -321,7 +321,7 @@ module PG
       # as +connection_hash+ argument variant. They will be ignored in +connection_string+.
       # 
       # +client_encoding+ *will* be set for you according to Encoding.default_internal.
-      def self.async_connect(*args, &blk)
+      def self.em_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(args)
         conn = df.protect { connect_start(*args) }
@@ -338,7 +338,7 @@ module PG
       # Returns +Deferrable+. Use it's +callback+ to handle success.
       # If block is provided, it's bound to +callback+ and +errback+ of returned
       # +Deferrable+.
-      def async_reset(&blk)
+      def em_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
         ret = df.protect(:fail) { reset_start }
@@ -379,9 +379,9 @@ module PG
       end
 
       # Perform autoreconnect. Used internally.
-      def async_autoreconnect!(deferrable, error, &send_proc)
+      def em_autoreconnect!(deferrable, error, &send_proc)
         if async_autoreconnect && self.status != PG::CONNECTION_OK
-          reset_df = async_reset
+          reset_df = em_reset
           reset_df.errback { |ex| deferrable.fail(ex) }
           reset_df.callback do
             if on_autoreconnect
@@ -414,7 +414,7 @@ module PG
           ).each_slice(2) do |name, send_name|
 
         class_eval <<-EOD
-        def async_#{name}(*args, &blk)
+        def em_#{name}(*args, &blk)
           df = PG::EM::FeaturedDeferrable.new(&blk)
           send_proc = proc do
             #{send_name}(*args)
@@ -424,7 +424,7 @@ module PG
             raise PG::Error, "previous query expired, need connection reset" if @async_command_aborted
             send_proc.call
           rescue PG::Error => e
-            async_autoreconnect!(df, e, &send_proc)
+            em_autoreconnect!(df, e, &send_proc)
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }
           end
@@ -435,7 +435,7 @@ module PG
         class_eval <<-EOD
         def #{name}(*args, &blk)
           if ::EM.reactor_running?
-            async_#{name}(*args, &blk)
+            em_#{name}(*args, &blk)
           else
             super(*args, &blk)
           end
@@ -445,6 +445,8 @@ module PG
       end
 
       alias_method :query, :exec
+      alias_method :em_query, :em_exec
+      alias_method :async_exec, :exec
       alias_method :async_query, :async_exec
 
       # support for pg < 0.14.0
