@@ -16,13 +16,13 @@ module PG
   module EM
     module Errors
       class PGError < PG::Error
-        def initialize(message, connection = nil, result = nil)
+        def initialize(message = nil, connection = nil, result = nil)
           super message
           @connection = connection
           @result = result
         end
         class << self
-          def exception(error)
+          def exception(error = nil)
             err = super
             err.instance_eval do
               @connection = error.connection if error.respond_to?(:connection)
@@ -31,12 +31,12 @@ module PG
             err
           end
           def wrap(error)
-            if error.is_a?(PGError)
-              error
-            else
+            if error.class == PG::Error
               err = exception(error)
               err.set_backtrace(error.backtrace)
               err
+            else
+              error
             end
           end
         end
