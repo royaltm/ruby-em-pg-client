@@ -40,7 +40,7 @@ describe 'em-pg default autoreconnect' do
   it "should not get database size using query after server shutdown" do
     system($pgserver_cmd_stop).should be_true
     @client.query('SELECT pg_database_size(current_database());') do |ex|
-      ex.should be_a_kind_of PG::EM::Errors::ConnectionError
+      ex.should be_an_instance_of PG::EM::Errors::ConnectionRefusedError
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end

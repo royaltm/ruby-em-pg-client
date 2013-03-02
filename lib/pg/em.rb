@@ -384,7 +384,7 @@ module PG
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(args)
-        conn = df.protect(nil, ConnectionError) { connect_start(*args) }
+        conn = df.protect(nil, ConnectionRefusedError) { connect_start(*args) }
         if conn
           async_args.each {|k, v| conn.instance_variable_set(k, v) }
           ::EM.watch(conn.socket, ConnectWatcher, conn, df, :connect).poll_connection_and_check
@@ -403,7 +403,7 @@ module PG
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
-        ret = df.protect(:fail, ConnectionError) { reset_start }
+        ret = df.protect(:fail, ConnectionRefusedError) { reset_start }
         unless ret == :fail
           ::EM.watch(self.socket, ConnectWatcher, self, df, :reset).poll_connection_and_check
         end
