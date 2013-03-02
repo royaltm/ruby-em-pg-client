@@ -68,34 +68,20 @@ module PG
       end
 
       def protect(fail_value = nil, pg_error = QueryError)
-        err = begin
-          return yield
-        rescue PGError => e
-          e
-        rescue PG::Error => e
-          pg_error.wrap(e)
-        rescue Exception => e
-          e
-        end
-        ::EM.next_tick { fail(err) }
+        yield
+      rescue Exception => e
+        ::EM.next_tick { fail pg_error.wrap(e) }
         fail_value
       end
 
       def protect_and_succeed(fail_value = nil, pg_error = QueryError)
-        err = begin
-          ret = yield
-        rescue PGError => e
-          e
-        rescue PG::Error => e
-          pg_error.wrap(e)
-        rescue Exception => e
-          e
-        else
-          ::EM.next_tick { succeed(ret) }
-          return ret
-        end
-        ::EM.next_tick { fail(err) }
+        ret = yield
+      rescue Exception => e
+        ::EM.next_tick { fail pg_error.wrap(e) }
         fail_value
+      else
+        ::EM.next_tick { succeed(ret) }
+        return ret
       end
     end
     # == PostgreSQL EventMachine client
