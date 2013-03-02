@@ -16,6 +16,31 @@ shared_context 'pg-em common' do
   end
 end
 
+describe 'pg-em async connect fail' do
+  around(:each) do |testcase|
+    begin
+      system($pgserver_cmd_stop).should be_true
+      testcase.call
+    ensure
+      system($pgserver_cmd_start).should be_true
+    end
+  end
+
+  it "should not connect when server is down" do
+    error = nil
+    EM.run do
+      EM.add_timer(1) { EM.stop }
+      df = PG::EM::Client.async_connect
+      df.callback {|c| c.close }
+      df.errback do |err|
+        error = err
+        EM.stop
+      end
+    end
+    error.should be_an_instance_of PG::EM::Errors::ConnectionRefusedError
+  end
+end
+
 describe 'pg-em default autoreconnect' do
   include_context 'pg-em common'
 
