@@ -4,18 +4,22 @@ require 'eventmachine'
 require 'pg/em'
 
 describe PG::EM::Errors do
+  let(:pg_error) {
+    described_class::PGError
+  }
+
   let(:pg_em_errors) {
-    %w[PGError QueryError ConnectError QueryTimeoutError ConnectTimeoutError].map do |err_name|
+    %w[Error QueryError ConnectionError QueryTimeoutError ConnectionTimeoutError].map do |err_name|
       described_class.const_get err_name
     end
   }
 
   let(:other_errors) {
-    [described_class::PGError, ArgumentError, RuntimeError, StandardError, Exception]
+    [described_class::Error, ArgumentError, RuntimeError, StandardError, Exception]
   }
 
   let(:timeout_errors) {
-    %w[QueryTimeoutError ConnectTimeoutError].map do |err_name|
+    %w[QueryTimeoutError ConnectionTimeoutError].map do |err_name|
       described_class.const_get err_name
     end
   }
@@ -23,15 +27,15 @@ describe PG::EM::Errors do
   it "should initialize PGError with connection and result" do
     pg_em_errors.each do |err_class|
       err = err_class.new('error')
-      err.should be_a_kind_of PG::Error
+      err.should be_a_kind_of pg_error
       err.connection.should be_nil
       err.result.should be_nil
       err = err_class.new('error', :connection)
-      err.should be_a_kind_of PG::Error
+      err.should be_a_kind_of pg_error
       err.connection.should eq :connection
       err.result.should be_nil
       err = err_class.new('error', :connection, :result)
-      err.should be_a_kind_of PG::Error
+      err.should be_a_kind_of pg_error
       err.connection.should eq :connection
       err.result.should eq :result
     end
@@ -50,11 +54,11 @@ describe PG::EM::Errors do
   it "should wrap PG::Error" do
     pg_em_errors.each do |err_class|
       begin
-        error = PG::Error.new
+        error = pg_error.new
         error.instance_variable_set(:@connection, :connection)
         error.instance_variable_set(:@result, :result)
         raise error
-      rescue PG::Error => e
+      rescue pg_error => e
         e.connection.should eq :connection
         e.result.should eq :result
         begin

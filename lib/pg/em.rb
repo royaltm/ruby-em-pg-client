@@ -15,7 +15,8 @@ module PG
 
   module EM
     module Errors
-      class PGError < PG::Error
+      PGError = PG::Error
+      class Error < PGError
         def initialize(message = nil, connection = nil, result = nil)
           super message
           @connection = connection
@@ -31,7 +32,7 @@ module PG
             err
           end
           def wrap(error)
-            if error.class == PG::Error
+            if error.class == PGError
               err = exception(error)
               err.set_backtrace(error.backtrace)
               err
@@ -42,9 +43,9 @@ module PG
         end
       end
       # raised during query execution
-      class QueryError < PGError; end
+      class QueryError < Error; end
       # raised while connecting (or resetting connection) asynchronously
-      class ConnectError < PGError; end
+      class ConnectionError < Error; end
       # TimeoutError module is included by timeout errors
       # so one may only need to rescue TimeoutError
       # to catch all timeout error types
@@ -54,7 +55,7 @@ module PG
         include TimeoutError
       end
       # raised on connect timeout
-      class ConnectTimeoutError < ConnectError
+      class ConnectionTimeoutError < ConnectionError
         include TimeoutError
       end
     end
@@ -248,7 +249,7 @@ module PG
         rescue Exception => e
           detach
           @timer.cancel if @timer
-          if e.is_a?(PG::Error)
+          if e.is_a?(PGError)
             @client.async_autoreconnect!(@deferrable, QueryError.wrap(e), &@send_proc)
           else
             @deferrable.fail(e)
@@ -273,7 +274,7 @@ module PG
               begin
                 detach
                 @deferrable.protect do
-                  raise ConnectTimeoutError.new("timeout expired (async)", @client)
+                  raise ConnectionTimeoutError.new("timeout expired (async)", @client)
                 end
               ensure
                 @client.finish unless reconnecting?
@@ -368,11 +369,11 @@ module PG
       # 
       # +client_encoding+ *will* be set for you according to Encoding.default_internal.
       #
-      # raises ConnectError or ConnectTimeoutError on timeout
+      # raises ConnectionError or ConnectionTimeoutError on timeout
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(args)
-        conn = df.protect(nil, ConnectError) { connect_start(*args) }
+        conn = df.protect(nil, ConnectionError) { connect_start(*args) }
         if conn
           async_args.each {|k, v| conn.instance_variable_set(k, v) }
           ::EM.watch(conn.socket, ConnectWatcher, conn, df, :connect).poll_connection_and_check
@@ -387,11 +388,11 @@ module PG
       # If block is provided, it's bound to +callback+ and +errback+ of returned
       # +Deferrable+.
       #
-      # raises ConnectError or ConnectTimeoutError on timeout
+      # raises ConnectionError or ConnectionTimeoutError on timeout
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
-        ret = df.protect(:fail, ConnectError) { reset_start }
+        ret = df.protect(:fail, ConnectionError) { reset_start }
         unless ret == :fail
           ::EM.watch(self.socket, ConnectWatcher, self, df, :reset).poll_connection_and_check
         end
@@ -473,7 +474,7 @@ module PG
           begin
             raise QueryError.new("previous query expired, need connection reset", self) if @async_command_aborted
             send_proc.call
-          rescue PG::Error => e
+          rescue PGError => e
             async_autoreconnect!(df, QueryError.wrap(e), &send_proc)
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }

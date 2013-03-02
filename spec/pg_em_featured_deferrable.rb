@@ -16,7 +16,7 @@ describe PG::EM::FeaturedDeferrable do
     end
   }
   let(:query_error)   { described_class::QueryError }
-  let(:connect_error) { described_class::ConnectError }
+  let(:connection_error) { described_class::ConnectionError }
 
   it "should set callback with block" do
     cb.should_receive(:call).with(:result)
@@ -61,8 +61,8 @@ describe PG::EM::FeaturedDeferrable do
     it "should call df.fail with specified error and return custom fail value" do
       ::EM.stub(:next_tick) {|&cb| cb.call }
       df.errback(&cb)
-      cb.should_receive(:call).with(instance_of connect_error)
-      df.send(protect_method, :fail, connect_error) do
+      cb.should_receive(:call).with(instance_of connection_error)
+      df.send(protect_method, :fail, connection_error) do
         raise pg_error
       end.should eq :fail
     end
