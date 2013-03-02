@@ -4,18 +4,26 @@ task :default => [:test]
 
 $gem_name = "em-pg-client"
 
-desc "Run spec tests"
-task :test, [:which] do |t, args|
-  args.with_defaults(:which => 'safe')
+desc "Run tests"
+task :test => :'test:safe'
 
+namespace :test do
   env_common = {'PGDATABASE' => 'test'}
   env_pg_013 = {'EM_PG_CLIENT_TEST_PG_VERSION' => '= 0.13.2'}
   env_unix_socket = env_common.merge('PGHOST' => '/tmp')
   env_tcpip = env_common.merge('PGHOST' => 'localhost')
 
-  puts "WARNING: The test needs to be run with an available local PostgreSQL server"
+  task :warn do
+    puts "WARNING: The test needs to be run with an available local PostgreSQL server"
+  end
 
-  if %w[all safe].include? args[:which]
+  desc "Run specs only"
+  task :spec do
+    sh "rspec spec/pg_em_errors.rb"
+  end
+
+  desc "Run safe tests only"
+  task :safe => [:warn, :spec] do
     %w[
       spec/em_release_client.rb
       spec/em_devel_client.rb
@@ -28,7 +36,8 @@ task :test, [:which] do |t, args|
     end
   end
 
-  if %w[all unsafe dangerous autoreconnect].include? args[:which]
+  desc "Run unsafe tests only"
+  task :unsafe => :warn do
     raise "Set PGDATA environment variable before running the autoreconnect tests." unless ENV['PGDATA']
     %w[
       spec/em_client_autoreconnect.rb
@@ -38,6 +47,9 @@ task :test, [:which] do |t, args|
       sh env_tcpip, "rspec #{spec}"
     end
   end
+
+  desc "Run safe and unsafe tests"
+  task :all => [:safe, :unsage]
 end
 
 desc "Build the gem"
