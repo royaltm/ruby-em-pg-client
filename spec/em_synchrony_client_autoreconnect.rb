@@ -40,7 +40,7 @@ describe 'em-synchrony-pg default autoreconnect' do
     system($pgserver_cmd_stop).should be_true
     expect {
       @tested_proc.call
-    }.to raise_error(PG::EM::Errors::ConnectError)
+    }.to raise_error(PG::EM::Errors::ConnectionError)
   end
 
   it "should get database size using query after server startup" do

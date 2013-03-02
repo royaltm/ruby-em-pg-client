@@ -46,6 +46,10 @@ module PG
       class QueryError < Error; end
       # raised while connecting (or resetting connection) asynchronously
       class ConnectionError < Error; end
+      # raised when PG::PGRES_POLLING_FAILED received during poll
+      class ConnectionRefusedError < ConnectionError; end
+      # raised when invalid poll status received during poll
+      class BadPollStatusError < ConnectionError; end
       # TimeoutError module is included by timeout errors
       # so one may only need to rescue TimeoutError
       # to catch all timeout error types
@@ -296,28 +300,35 @@ module PG
         end
 
         def poll_connection_and_check
-          case @client.__send__(@poll_method)
+          error = case @client.__send__(@poll_method)
           when PG::PGRES_POLLING_READING
             self.notify_readable = true
             self.notify_writable = false
+            return
           when PG::PGRES_POLLING_WRITING
             self.notify_writable = true
             self.notify_readable = false
-          when PG::PGRES_POLLING_OK, PG::PGRES_POLLING_FAILED
-            @timer.cancel if @timer
-            detach
-            @deferrable.protect_and_succeed(nil, ConnectError) do
-              unless @client.status == PG::CONNECTION_OK
-                begin
-                  raise ConnectError.new(@client.error_message, @client)
-                ensure
-                  @client.finish unless reconnecting?
-                end
+            return
+          when PG::PGRES_POLLING_OK
+            ConnectionError
+          when PG::PGRES_POLLING_FAILED
+            ConnectionRefusedError
+          else
+            BadPollStatusError
+          end
+          @timer.cancel if @timer
+          detach
+          @deferrable.protect_and_succeed(nil, ConnectionError) do
+            unless @client.status == PG::CONNECTION_OK
+              begin
+                raise error.new(@client.error_message, @client)
+              ensure
+                @client.finish unless reconnecting?
               end
-              # mimic blocking connect behavior
-              @client.set_default_encoding unless reconnecting?
-              @client
             end
+            # mimic blocking connect behavior
+            @client.set_default_encoding unless reconnecting?
+            @client
           end
         end
       end
