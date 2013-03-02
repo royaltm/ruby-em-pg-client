@@ -6,7 +6,7 @@ require 'pg/em'
 $pgserver_cmd_stop = %Q[sudo su - postgres -c 'pg_ctl stop -m fast']
 $pgserver_cmd_start = %Q[sudo su - postgres -c 'pg_ctl -l $PGDATA/postgres.log start -w']
 
-shared_context 'em-pg common' do
+shared_context 'pg-em common' do
   around(:each) do |testcase|
     EM.run(&testcase)
   end
@@ -16,8 +16,8 @@ shared_context 'em-pg common' do
   end
 end
 
-describe 'em-pg default autoreconnect' do
-  include_context 'em-pg common'
+describe 'pg-em default autoreconnect' do
+  include_context 'pg-em common'
 
   it "should not have modified argument Hash" do
     begin
@@ -64,8 +64,8 @@ describe 'em-pg default autoreconnect' do
   end
 end
 
-describe 'em-pg autoreconnect with on_autoreconnect' do
-  include_context 'em-pg common'
+describe 'pg-em autoreconnect with on_autoreconnect' do
+  include_context 'pg-em common'
 
   it "should not have modified argument Hash" do
     begin
@@ -105,8 +105,8 @@ describe 'em-pg autoreconnect with on_autoreconnect' do
   end
 end
 
-describe 'em-pg with autoreconnect disabled' do
-  include_context 'em-pg common'
+describe 'pg-em with autoreconnect disabled' do
+  include_context 'pg-em common'
 
   it "should get database size using query" do
     @tested_proc.call
