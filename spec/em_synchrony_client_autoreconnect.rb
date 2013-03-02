@@ -107,7 +107,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     system($pgserver_cmd_start).should be_true
     expect {
       @tested_proc.call
-    }.to raise_error(PG::EM::Errors::QueryError)
+    }.to raise_error(PG::EM::Errors::QueryBadStateError)
   end
 
   it "should get database size using query after manual connection reset" do

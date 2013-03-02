@@ -44,12 +44,16 @@ module PG
       end
       # raised during query execution
       class QueryError < Error; end
+      # raised during query execution when connection was in BAD state
+      class QueryBadStateError < QueryError; end
       # raised while connecting (or resetting connection) asynchronously
       class ConnectionError < Error; end
       # raised when PG::PGRES_POLLING_FAILED received during poll
       class ConnectionRefusedError < ConnectionError; end
       # raised when invalid poll status received during poll
-      class BadPollStatusError < ConnectionError; end
+      class UnexpectedStateError < ConnectionRefusedError; end
+      class BadConnectionStatusError < UnexpectedStateError; end
+      class BadPollStatusError < UnexpectedStateError; end
       # TimeoutError module is included by timeout errors
       # so one may only need to rescue TimeoutError
       # to catch all timeout error types
@@ -254,7 +258,7 @@ module PG
           detach
           @timer.cancel if @timer
           if e.is_a?(PGError)
-            @client.async_autoreconnect!(@deferrable, QueryError.wrap(e), &@send_proc)
+            @client.async_autoreconnect!(@deferrable, e, &@send_proc)
           else
             @deferrable.fail(e)
           end
@@ -310,7 +314,13 @@ module PG
             self.notify_readable = false
             return
           when PG::PGRES_POLLING_OK
-            ConnectionError
+            case @client.status
+            when PG::CONNECTION_OK
+            when PG::CONNECTION_BAD
+              ConnectionRefusedError
+            else
+              BadConnectionStatusError
+            end
           when PG::PGRES_POLLING_FAILED
             ConnectionRefusedError
           else
@@ -319,7 +329,7 @@ module PG
           @timer.cancel if @timer
           detach
           @deferrable.protect_and_succeed(nil, ConnectionError) do
-            unless @client.status == PG::CONNECTION_OK
+            if error
               begin
                 raise error.new(@client.error_message, @client)
               ensure
@@ -442,28 +452,33 @@ module PG
 
       # Perform autoreconnect. Used internally.
       def async_autoreconnect!(deferrable, error, &send_proc)
-        if async_autoreconnect && self.status != PG::CONNECTION_OK
-          reset_df = async_reset
-          reset_df.errback { |ex| deferrable.fail(ex) }
-          reset_df.callback do
-            if on_autoreconnect
-              returned_df = on_autoreconnect.call(self, error)
-              if returned_df == false
-                ::EM.next_tick { deferrable.fail(error) }
-              elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
-                returned_df.callback { deferrable.protect(&send_proc) }
-                returned_df.errback { |ex| deferrable.fail(ex) }
-              elsif returned_df.is_a?(Exception)
-                ::EM.next_tick { deferrable.fail(returned_df) }
+        if self.status != PG::CONNECTION_OK
+          if async_autoreconnect
+            error = QueryError.wrap(error)
+            reset_df = async_reset
+            reset_df.errback { |ex| deferrable.fail(ex) }
+            reset_df.callback do
+              if on_autoreconnect
+                returned_df = on_autoreconnect.call(self, error)
+                if returned_df == false
+                  ::EM.next_tick { deferrable.fail(error) }
+                elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                  returned_df.callback { deferrable.protect(&send_proc) }
+                  returned_df.errback { |ex| deferrable.fail(ex) }
+                elsif returned_df.is_a?(Exception)
+                  ::EM.next_tick { deferrable.fail(returned_df) }
+                else
+                  deferrable.protect(&send_proc)
+                end
               else
                 deferrable.protect(&send_proc)
               end
-            else
-              deferrable.protect(&send_proc)
             end
+          else
+            ::EM.next_tick { deferrable.fail(QueryBadStateError.wrap(error)) }
           end
         else
-          ::EM.next_tick { deferrable.fail(error) }
+          ::EM.next_tick { deferrable.fail(QueryError.wrap(error)) }
         end
       end
 
@@ -483,10 +498,10 @@ module PG
             ::EM.watch(self.socket, Watcher, self, df, send_proc).notify_readable = true
           end
           begin
-            raise QueryError.new("previous query expired, need connection reset", self) if @async_command_aborted
+            raise QueryBadStateError.new("previous query expired, need connection reset", self) if @async_command_aborted
             send_proc.call
           rescue PGError => e
-            async_autoreconnect!(df, QueryError.wrap(e), &send_proc)
+            async_autoreconnect!(df, e, &send_proc)
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }
           end

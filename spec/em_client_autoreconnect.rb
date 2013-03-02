@@ -141,7 +141,7 @@ describe 'pg-em with autoreconnect disabled' do
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     @client.query('SELECT pg_database_size(current_database());') do |ex|
-      ex.should be_an_instance_of PG::EM::Errors::QueryError
+      ex.should be_an_instance_of PG::EM::Errors::QueryBadStateError
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end

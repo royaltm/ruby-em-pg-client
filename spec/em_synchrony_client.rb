@@ -195,6 +195,11 @@ describe PG::EM::Client do
     @client.query_timeout.should eq 0
     @client.async_command_aborted.should be_true
     @client.status.should be PG::CONNECTION_BAD
+    @client.async_autoreconnect = false
+    expect {
+      @client.query('SELECT 1')
+    }.to raise_error(described_class::QueryBadStateError)
+    @client.async_autoreconnect = true
   end
 
   it "should timeout not expire while executing query with partial results" do
