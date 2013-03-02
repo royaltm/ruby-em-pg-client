@@ -81,7 +81,7 @@ module PG
         fail_value
       else
         ::EM.next_tick { succeed(ret) }
-        return ret
+        ret
       end
     end
     # == PostgreSQL EventMachine client
