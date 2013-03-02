@@ -1,14 +1,27 @@
 $:.unshift "lib"
-gem 'eventmachine', '>= 1.0.0.beta.1'
 gem 'pg', ENV['EM_PG_CLIENT_TEST_PG_VERSION']
-require 'date'
 require 'eventmachine'
 require 'pg/em'
 
 describe PG::EM::Errors do
+  let(:pg_em_errors) {
+    %w[PGError QueryError ConnectError QueryTimeoutError ConnectTimeoutError].map do |err_name|
+      described_class.const_get err_name
+    end
+  }
+
+  let(:other_errors) {
+    [described_class::PGError, ArgumentError, RuntimeError, StandardError, Exception]
+  }
+
+  let(:timeout_errors) {
+    %w[QueryTimeoutError ConnectTimeoutError].map do |err_name|
+      described_class.const_get err_name
+    end
+  }
+
   it "should initialize PGError with connection and result" do
-    %w[PGError QueryError ConnectError QueryTimeoutError ConnectTimeoutError].each do |err_name|
-      err_class = described_class.const_get(err_name)
+    pg_em_errors.each do |err_class|
       err = err_class.new('error')
       err.should be_a_kind_of PG::Error
       err.connection.should be_nil
@@ -25,8 +38,7 @@ describe PG::EM::Errors do
   end
 
   it "should allow rescue of TimeoutError" do
-    %w[QueryTimeoutError ConnectTimeoutError].each do |err_name|
-      err_class = described_class.const_get(err_name)
+    timeout_errors.each do |err_class|
       begin
         raise err_class
       rescue described_class::TimeoutError => e
@@ -36,8 +48,7 @@ describe PG::EM::Errors do
   end
 
   it "should wrap PG::Error" do
-    %w[PGError QueryError ConnectError QueryTimeoutError ConnectTimeoutError].each do |err_name|
-      err_class = described_class.const_get(err_name)
+    pg_em_errors.each do |err_class|
       begin
         error = PG::Error.new
         error.instance_variable_set(:@connection, :connection)
@@ -62,9 +73,8 @@ describe PG::EM::Errors do
   end
 
   it "should not wrap any other error" do
-    %w[PGError QueryError ConnectError QueryTimeoutError ConnectTimeoutError].each do |err_name|
-      err_class = described_class.const_get(err_name)
-      [described_class::PGError, ArgumentError, RuntimeError, StandardError, Exception].each do |err_other_class|
+    pg_em_errors.each do |err_class|
+      other_errors.each do |err_other_class|
         begin
           raise err_other_class
         rescue Exception => e
