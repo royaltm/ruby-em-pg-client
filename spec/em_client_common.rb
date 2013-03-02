@@ -11,9 +11,9 @@ module PGSpecMacros
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
 
-  def pg_exec_and_check_with_error(client, err_message, method, *args, &additional_checks)
+  def pg_exec_and_check_with_error(client, err_class, err_message, method, *args, &additional_checks)
     client.__send__(method, *args) do |exception|
-      exception.should be_an_instance_of PG::Error
+      exception.should be_an_instance_of err_class
       exception.to_s.should include err_message if err_message
       additional_checks.call(exception) if additional_checks
       EM.stop
@@ -32,9 +32,9 @@ module PGSpecMacros
       end
     end
 
-    def it_should_execute_with_error(text, err_message, method, *args)
+    def it_should_execute_with_error(text, err_class, err_message, method, *args)
       it "should #{text}" do
-        pg_exec_and_check_with_error(@client, err_message, method, *args)
+        pg_exec_and_check_with_error(@client, err_class, err_message, method, *args)
       end
     end
 
@@ -207,6 +207,7 @@ shared_context 'em-pg common after' do
   end
 
   it_should_execute_with_error("raise syntax error in misspelled multiple statement",
+      described_class::QueryError,
       "syntax error",
       :query, 'SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number')
 
@@ -224,7 +225,9 @@ shared_context 'em-pg common after' do
     @client.query_timeout = 1.5
     @client.query_timeout.should eq 1.5
     start_time = Time.now
-    pg_exec_and_check_with_error(@client, "query timeout expired", :query, 'SELECT pg_sleep(2)') do
+    pg_exec_and_check_with_error(@client,
+        described_class::QueryTimeoutError, "query timeout expired",
+        :query, 'SELECT pg_sleep(2)') do
       (Time.now - start_time).should be < 2
       @client.async_command_aborted.should be_true
       @client.status.should be PG::CONNECTION_BAD
@@ -258,7 +261,9 @@ shared_context 'em-pg common after' do
     @client.query_timeout = 1.1
     @client.query_timeout.should eq 1.1
     start_time = Time.now
-    pg_exec_and_check_with_error(@client, "query timeout expired", :query,
+    pg_exec_and_check_with_error(@client,
+        described_class::QueryTimeoutError, "query timeout expired",
+        :query,
         'SELECT * from pg_class;' +
         'SELECT pg_sleep(1);' +
         'SELECT * from pg_class;' + 

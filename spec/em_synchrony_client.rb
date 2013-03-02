@@ -166,7 +166,7 @@ describe PG::EM::Client do
   it "should raise syntax error in misspelled multiple statement" do
     expect {
       @client.query('SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number')
-    }.to raise_error(PG::Error, /syntax error/)
+    }.to raise_error(described_class::QueryError, /syntax error/)
   end
   
   it "should rollback transaction" do
@@ -189,7 +189,7 @@ describe PG::EM::Client do
     start_time = Time.now
     expect {
       @client.query('SELECT pg_sleep(2)')
-    }.to raise_error(PG::Error, /query timeout expired/)
+    }.to raise_error(described_class::QueryTimeoutError, /query timeout expired/)
     (Time.now - start_time).should be < 2
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
@@ -230,7 +230,7 @@ describe PG::EM::Client do
           'SELECT * from pg_class;' + 
           'SELECT pg_sleep(2);' +
           'SELECT 42 number')
-    }.to raise_error(PG::Error, /query timeout expired/)
+    }.to raise_error(described_class::QueryTimeoutError, /query timeout expired/)
     (Time.now - start_time).should be > 2
     @client.async_command_aborted.should be_true
     @client.status.should be PG::CONNECTION_BAD
