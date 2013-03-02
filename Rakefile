@@ -20,6 +20,7 @@ namespace :test do
   desc "Run specs only"
   task :spec do
     sh "rspec spec/pg_em_errors.rb"
+    sh "rspec spec/pg_em_featured_deferrable.rb"
   end
 
   desc "Run safe tests only"
