@@ -1,3 +1,4 @@
+require 'fiber'
 require 'pg/em'
 module PG
   module EM
