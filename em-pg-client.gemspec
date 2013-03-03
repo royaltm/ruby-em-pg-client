@@ -1,8 +1,9 @@
 $:.unshift "lib"
+require 'pg/em-version'
 
 Gem::Specification.new do |s|
   s.name = "em-pg-client"
-  s.version = "0.2.1"
+  s.version = PG::EM::VERSION
   s.required_ruby_version = ">= 1.9.1"
   s.date = "#{Time.now.strftime("%Y-%m-%d")}"
   s.summary = "EventMachine PostgreSQL client"

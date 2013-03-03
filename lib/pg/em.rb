@@ -10,10 +10,11 @@ unless defined? EventMachine
     raise 'Missing EventMachine: gem install eventmachine'
   end
 end
+require 'pg/em-version'
 
 module PG
-
   module EM
+
     module Errors
       PGError = PG::Error
       class Error < PGError
@@ -45,6 +46,7 @@ module PG
       # raised during query execution
       class QueryError < Error; end
       # raised during query execution when connection was in BAD state
+      # this is raised only when async_autoreconnect is disabled
       class QueryBadStateError < QueryError; end
       # raised while connecting (or resetting connection) asynchronously
       class ConnectionError < Error; end
@@ -67,6 +69,7 @@ module PG
         include TimeoutError
       end
     end
+
     class FeaturedDeferrable < ::EM::DefaultDeferrable
       include Errors
       def initialize(&blk)
@@ -118,7 +121,7 @@ module PG
     # - +describe_prepared+
     # - +describe_portal+
     #
-    # autodetecting if EventMachine is running and using the appropriate
+    # auto-detecting if EventMachine is running and using the appropriate
     # (async or sync) method version.
     #
     # Additionally to the above, there are asynchronous methods defined for
