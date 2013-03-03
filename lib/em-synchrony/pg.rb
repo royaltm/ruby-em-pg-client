@@ -8,10 +8,24 @@ module PG
       # =PostgreSQL Client for EM-Synchrony/Fibered EventMachine
       #
 
-      # conform to *standard*
-      alias_method :aquery, :async_query
+      alias_method :aquery, :send_query
 
-      # fiber aware methods:
+      # asynchronous methods that return deferrable:
+      # - send_query (aliased as aquery)
+      # - send_query_prepared
+      # - send_prepare
+      # - send_describe_prepared
+      # - send_describe_portal
+      #
+      # fiber entangled asynchronous methods:
+      # - async_exec (aliased as async_query)
+      # - async_exec_prepared
+      # - async_prepare
+      # - async_describe_prepared
+      # - async_describe_portal
+      #
+      # fiber aware and reactor-sensitive methods:
+      # (synchronous while reactor is not running)
       # - exec (aliased as query)
       # - exec_prepared
       # - prepare
@@ -19,32 +33,56 @@ module PG
       # - describe_portal
       # - reset
       # - Client.connect
-      %w(exec
-         exec_prepared
-         prepare
-         describe_prepared
-         describe_portal
-         reset
-         self.connect).each do |name|
+      %w(
+        exec              send_query
+        exec_prepared     send_query_prepared
+        prepare           send_prepare
+        describe_prepared send_describe_prepared
+        describe_portal   send_describe_portal
+        reset             *
+        self.connect      *
+          ).each_slice(2) do |name, send_name|
         async_name = "async_#{name.split('.').last}"
-        blocking_call = case name
-        when 'reset'
-          '@async_command_aborted = false
-            super(*args, &blk)'
+        if send_name == '*'
+          blocking_call = case name
+          when 'reset'
+            '@async_command_aborted = false
+                super(*args, &blk)'
+          else
+            'super(*args, &blk)'
+          end
+
+          class_eval <<-EOD, __FILE__, __LINE__
+            def #{name}(*args, &blk)
+              if ::EM.reactor_running?
+                f = Fiber.current
+                #{async_name}(*args) do |res|
+                  f.resume(res)
+                end
+
+                result = Fiber.yield
+                raise result if result.is_a?(::Exception)
+                if block_given?
+                  begin
+                    yield result
+                  ensure
+                    result.finish
+                  end
+                else
+                  result
+                end
+              else
+                #{blocking_call}
+              end
+            end
+          EOD
+
         else
-          'super(*args, &blk)'
-        end
-        clear_method = case name
-        when 'reset', 'self.connect'
-          'finish'
-        else
-          'clear'
-        end
-        class_eval <<-EOD
-          def #{name}(*args, &blk)
-            if ::EM.reactor_running?
+
+          class_eval <<-EOD, __FILE__, __LINE__
+            def #{async_name}(*args, &blk)
               f = Fiber.current
-              #{async_name}(*args) do |res|
+              #{send_name}(*args) do |res|
                 f.resume(res)
               end
 
@@ -54,16 +92,14 @@ module PG
                 begin
                   yield result
                 ensure
-                  result.#{clear_method}
+                  result.clear
                 end
               else
                 result
               end
-            else
-              #{blocking_call}
             end
-          end
-        EOD
+          EOD
+        end
       end
 
       class << self
@@ -73,7 +109,7 @@ module PG
         alias_method :setdblogin, :connect
       end
 
-      alias_method :query, :exec
+      alias_method :async_query, :async_exec
 
       def async_autoreconnect!(deferrable, error, &send_proc)
         if self.status != PG::CONNECTION_OK

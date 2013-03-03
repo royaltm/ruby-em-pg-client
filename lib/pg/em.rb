@@ -494,10 +494,10 @@ module PG
           ).each_slice(2) do |name, send_name|
 
         class_eval <<-EOD, __FILE__, __LINE__
-        def async_#{name}(*args, &blk)
+        def #{send_name}(*args, &blk)
           df = PG::EM::FeaturedDeferrable.new(&blk)
           send_proc = proc do
-            #{send_name}(*args)
+            super(*args)
             ::EM.watch(self.socket, Watcher, self, df, send_proc).notify_readable = true
           end
           begin
@@ -511,6 +511,8 @@ module PG
           df
         end
         EOD
+
+        alias_method :"async_#{name}", :"#{send_name}"
 
         class_eval <<-EOD, __FILE__, __LINE__
         def #{name}(*args, &blk)
