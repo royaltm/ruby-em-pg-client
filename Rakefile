@@ -75,7 +75,7 @@ end
 
 desc "Documentation"
 task :doc do
-  sh "rdoc --encoding=UTF-8 --title=em-pg-client --main=README.rdoc README.rdoc BENCHMARKS.rdoc lib/*/*.rb"
+  sh "yardoc - README.md BENCHMARKS.md"
 end
 
 desc "Benchmark"

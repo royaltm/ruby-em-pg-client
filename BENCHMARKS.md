@@ -1,26 +1,30 @@
-== Benchmarks
+Benchmarks
+----------
 
-I've done some benchmark tests[link:benchmarks/em_pg.rb] to compare fully async and blocking em-pg drivers.
+I've done some benchmark {file:benchmarks/em_pg.rb tests} to compare fully async and blocking em-pg drivers.
 
 The goal of the test is simply to retrieve (~80000) rows from table with a lot of text data, in chunks, using parallel connections.
 The parallel method uses synchrony for simplicity.
 
-* +single+ is (eventmachine-less) job for retrieving a whole data table in
+* `single` is (eventmachine-less) job for retrieving a whole data table in
   one simple query "select * from resources"
-* +parallel+ chunk_row_count / concurrency] uses em-pg-client for retrieving
-  result in chunks by +chunk_row_count+ rows and using +concurrency+ parallel
+* `parallel` chunk_row_count / concurrency] uses em-pg-client for retrieving
+  result in chunks by `chunk_row_count` rows and using `concurrency` parallel
   connections
-* +blocking+ chunk_row_count / concurrency is similiar to +parallel+ except
+* `blocking` chunk_row_count / concurrency is similiar to `parallel` except
   that it uses special patched version of library that uses blocking
   PGConnection methods
 
-== Environment 
+Environment
+-----------
 
 The machine used for test is Linux CentOS 2.6.18-194.32.1.el5xen #1 SMP with Quad Core Xeon X3360 @ 2.83GHz, 4GB RAM.
 Postgres version used: 9.0.3.
 
-== The results:
+The results:
+------------
 
+```
     >> benchmark 1000
                               user     system      total        real
     single:              80.970000   0.350000  81.320000 (205.592592)
@@ -34,10 +38,11 @@ Postgres version used: 9.0.3.
     blocking 5000/5:     79.930000   1.810000  81.740000 (223.342432)
     blocking 2000/10:    76.990000   2.820000  79.810000 (225.347169)
     blocking 1000/20:    78.790000   3.230000  82.020000 (225.949107)
+```
 
 As we can see the gain from using asynchronous pg client while
-using +parallel+ queries is noticeable (up to ~30%).
+using `parallel` queries is noticeable (up to ~30%).
 
-The +blocking+ client however doesn't gain much from parallel execution.
+The `blocking` client however doesn't gain much from parallel execution.
 This was expected because it freezes eventmachine until the whole
 dataset is consumed by the client.

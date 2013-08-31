@@ -15,9 +15,9 @@ Gem::Specification.new do |s|
   s.files = `git ls-files`.split("\n") - ['.gitignore']
   s.test_files = Dir.glob("spec/**/*")
   s.rdoc_options << "--title" << "em-pg-client" <<
-    "--main" << "README.rdoc"
+    "--main" << "README.md"
   s.has_rdoc = true
-  s.extra_rdoc_files = ["README.rdoc", "BENCHMARKS.rdoc"]
+  s.extra_rdoc_files = ["README.md", "BENCHMARKS.md"]
   s.requirements << "PostgreSQL server"
   s.add_runtime_dependency "pg", ">= 0.13.2"
   s.add_runtime_dependency "eventmachine", ">= 0.12.10"
