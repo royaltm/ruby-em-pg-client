@@ -50,7 +50,7 @@ namespace :test do
   end
 
   desc "Run safe and unsafe tests"
-  task :all => [:safe, :unsafe]
+  task :all => [:spec, :safe, :unsafe]
 end
 
 desc "Build the gem"
