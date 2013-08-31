@@ -2,6 +2,9 @@ require 'fiber'
 require 'pg/em'
 module PG
   module EM
+    module Errors
+      class TransactionError < QueryError; end
+    end
     class Client
       # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
       # Licence:: MIT License
@@ -111,6 +114,51 @@ module PG
       end
 
       alias_method :async_query, :async_exec
+
+      # Executes a BEGIN at the start of the block
+      # and a COMMIT at the end of the block
+      # or ROLLBACK if any exception occurs.
+      # Calls to transaction may be nested,
+      # however without sub-transactions (save points).
+      TRAN_BEGIN_QUERY = 'BEGIN'
+      TRAN_ROLLBACK_QUERY = 'ROLLBACK'
+      TRAN_COMMIT_QUERY = 'COMMIT'
+      def transaction(&blk)
+        tcount = @client_tran_count.to_i
+        case transaction_status
+        when PG::PQTRANS_IDLE
+          if tcount.zero?
+            exec(TRAN_BEGIN_QUERY)
+          else
+            raise TransactionError.new('transaction status was idle, but transaction count != 0', self)
+          end
+        when PG::PQTRANS_INTRANS
+        else
+          raise TransactionError.new('error in transaction, need ROLLBACK', self)
+        end
+        @client_tran_count = tcount + 1
+        begin
+          blk.call self
+        rescue
+          case transaction_status
+          when PG::PQTRANS_INTRANS, PG::PQTRANS_INERROR
+            exec(TRAN_ROLLBACK_QUERY)
+          end
+          raise
+        else
+          case transaction_status
+          when PG::PQTRANS_INTRANS
+            exec(TRAN_COMMIT_QUERY) if tcount.zero?
+          when PG::PQTRANS_INERROR
+            exec(TRAN_ROLLBACK_QUERY)
+          when PG::PQTRANS_IDLE # rolled back before
+          else
+            raise TransactionError.new('unkown transaction status', self)
+          end
+        ensure
+          @client_tran_count = tcount
+        end
+      end
 
       def async_autoreconnect!(deferrable, error, &send_proc)
         if self.status != PG::CONNECTION_OK

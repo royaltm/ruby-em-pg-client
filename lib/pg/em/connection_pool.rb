@@ -2,14 +2,29 @@ require 'em-synchrony/pg'
 
 module PG
   module EM
-    module Errors
-      class TransactionError < QueryError; end
-    end
     class ConnectionPool
       include Errors
-
-      SIZE_KEYS = [:size, :pool_size, 'pool', 'pool_size']
-      def initialize(opts, &blk)
+      # Creates and initializes new connection pool
+      #
+      #   PG::EM::ConnectionPool.new([options][, &blk])
+      #
+      # Pass PG::EM::Client options and optional Client factory code as blk
+      #
+      # There are two custom ConnectionPool options:
+      #
+      # - :size or :pool_size = 1 - the number of Client connections
+      # - :disconnect_class   = QueryBadStateError - error class
+      #                       when raised during query execution will trigger
+      #                       re-creation of the Client connection;
+      #                       set to nil to disable this feature
+      #
+      # When :async_autoreconnect option is true the QueryBadStateError is never raised,
+      # so the :disconnect_class option only affects cases when you turn off async_autoreconnect
+      # and want to have more control over server errors.
+      #
+      # If yoy don't specify Client factory block the default Client factory
+      # will add :async_autoreconnect = true to the options.
+      def initialize(opts = {}, &blk)
         @available = []
         @pending = []
         @reserved = {}
@@ -30,19 +45,26 @@ module PG
 
         raise ArgumentError, "#{self.class}.new: pool size must be > 1" if size < 1
         
-        @acquire_cb = proc { PG::EM::Client.new(opts.merge(async_autoreconnect: true)) } unless block_given?
+        @acquire_cb = proc { Client.new(opts.merge(async_autoreconnect: true)) } unless block_given?
 
         size.times do
           @available << @acquire_cb.call
         end
       end
 
+      # finishes all Client connections
       def finish
         (@available + @reserved.values).each {|conn| conn.finish}
       end
 
       alias_method :close, :finish
 
+      # change property on all Client connections:
+      #
+      # - connect_timeout
+      # - query_timeout
+      # - async_autoreconnect
+      # - on_autoreconnect
       %w[connect_timeout query_timeout async_autoreconnect on_autoreconnect].each do |name|
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}=(value)
@@ -51,6 +73,7 @@ module PG
         EOD
       end
 
+      # define all regular Client query methods
       %w(
         exec              send_query
         exec_prepared     send_query_prepared
@@ -76,7 +99,7 @@ module PG
               f = Fiber.current
               pg.#{send_name}(*args) do |res|
                 release(f)
-                blk.call if blk
+                blk.call res if blk
               end
             end
           end
@@ -92,46 +115,22 @@ module PG
       # or ROLLBACK if any exception occurs.
       # Calls to transaction may be nested,
       # however without sub-transactions (save points).
+      #
+      # See PG::EM::Client#transaction and #execute
       def transaction(&blk)
         execute do |pg|
-          local = Thread.current
-          tcount = (local[:pg_em_client_tran_count] ||= 0)
-          case pg.transaction_status
-          when PG::PQTRANS_IDLE
-            if tcount.zero?
-              pg.exec('BEGIN')
-            else
-              raise TransactionError.new(pg)
-            end
-          when PG::PQTRANS_INTRANS
-          else
-            raise TransactionError.new(pg)
-          end
-          local[:pg_em_client_tran_count] = tcount + 1
-          begin
-            blk.call self
-          rescue
-            case pg.transaction_status
-            when PG::PQTRANS_INTRANS, PG::PQTRANS_INERROR
-              pg.exec('ROLLBACK')
-            end
-            raise
-          else
-            case pg.transaction_status
-            when PG::PQTRANS_INTRANS
-              pg.exec('COMMIT') if tcount.zero?
-            when PG::PQTRANS_INERROR
-              pg.exec('ROLLBACK')
-            when PG::PQTRANS_IDLE # rolled back before
-            else
-              raise TransactionError.new(pg)
-            end
-          ensure
-            local[:pg_em_client_tran_count] = tcount
-          end
+          pg.transaction(&blk)
         end
       end
 
+      # Acquires connection and passes it to the given block.
+      #
+      # If async is true does not releases connection upon block termination.
+      # The async feature is used only internally - release is a private method.
+      #
+      # It is possible to nest execute calls from the same fiber,
+      # so each time the block will be given the same Client instance.
+      # This feature is needed e.g. for nesting transaction calls.
       def execute(async = false)
         fiber = Fiber.current
         if conn = @reserved[fiber.object_id]
