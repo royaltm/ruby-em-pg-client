@@ -2,28 +2,60 @@ require 'em-synchrony/pg'
 
 module PG
   module EM
+    # This class is to be used only with synchrony version of {PG::EM::Client}
+    # required by
+    #   require 'em-synchrony/pg'
+    #
+    # To create a connection pool you need to pass +db_options+ hash
+    # to the ConnectionPool.new:
+    #
+    # @example Basic usage
+    #   pg = PG::EM::ConnectionPool.new size: 10, dbname: 'foo'
+    #   res = pg.query 'select * from bar'
+    #
+    # All of the below {Client} instance methods are available on {ConnectionPool} instance:
+    #
+    # * {SynchronyClient#exec}
+    # * {SynchronyClient#exec_params}
+    # * {SynchronyClient#exec_prepared}
+    # * {SynchronyClient#prepare}
+    # * {SynchronyClient#describe_prepared}
+    # * {SynchronyClient#describe_portal}
+    # * {SynchronyClient#async_exec}
+    # * {SynchronyClient#async_exec_params}
+    # * {SynchronyClient#async_exec_prepared}
+    # * {SynchronyClient#async_prepare}
+    # * {SynchronyClient#async_describe_prepared}
+    # * {SynchronyClient#async_describe_portal}
+    # * {Client#send_query}
+    # * {Client#send_query_prepared}
+    # * {Client#send_prepare}
+    # * {Client#send_describe_prepared}
+    # * {Client#send_describe_portal}
+    #
     class ConnectionPool
       include Errors
       # Creates and initializes new connection pool
       #
-      #   PG::EM::ConnectionPool.new([options][, &blk])
+      # Pass PG::EM::Client +options+ and optional Client factory code as +blk+
       #
-      # Pass PG::EM::Client options and optional Client factory code as blk
+      # There are two custom ConnectionPool +options+:
       #
-      # There are two custom ConnectionPool options:
+      # - +:size+ or +:pool_size+ = +1+ - the number of Client connections
+      # - +:disconnect_class+ = +QueryBadStateError+ - error class
+      #   when raised during query execution will trigger
+      #   re-creation of the Client connection;
+      #   set to nil to disable this feature
       #
-      # - :size or :pool_size = 1 - the number of Client connections
-      # - :disconnect_class   = QueryBadStateError - error class
-      #                       when raised during query execution will trigger
-      #                       re-creation of the Client connection;
-      #                       set to nil to disable this feature
+      # When +:async_autoreconnect+ option is true the +QueryBadStateError+ is never raised,
+      # so the +:disconnect_class+ option only affects cases when you turn off +async_autoreconnect+
+      # and want to have more control over server disconnects.
       #
-      # When :async_autoreconnect option is true the QueryBadStateError is never raised,
-      # so the :disconnect_class option only affects cases when you turn off async_autoreconnect
-      # and want to have more control over server errors.
+      # If you don't specify Client factory block the default Client factory
+      # will add +:async_autoreconnect+ = +true+ to the +options+.
       #
-      # If yoy don't specify Client factory block the default Client factory
-      # will add :async_autoreconnect = true to the options.
+      # @raise [Error]
+      # @raise [ArgumentError]
       def initialize(opts = {}, &blk)
         @available = []
         @pending = []
@@ -52,19 +84,21 @@ module PG
         end
       end
 
-      # finishes all Client connections
+      # Finishes all Client connections
       def finish
         (@available + @reserved.values).each {|conn| conn.finish}
       end
 
       alias_method :close, :finish
 
-      # change property on all Client connections:
-      #
-      # - connect_timeout
-      # - query_timeout
-      # - async_autoreconnect
-      # - on_autoreconnect
+      # @!attribute [w] connect_timeout
+      #   Sets {Client#connect_timeout} on all connections in this pool
+      # @!attribute [w] query_timeout
+      #   Sets {Client#query_timeout} on all connections in this pool
+      # @!attribute [w] async_autoreconnect
+      #   Sets {Client#async_autoreconnect} on all connections in this pool
+      # @!attribute [w] on_autoreconnect
+      #   Sets {Client#on_autoreconnect} on all connections in this pool
       %w[connect_timeout query_timeout async_autoreconnect on_autoreconnect].each do |name|
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}=(value)
@@ -73,26 +107,30 @@ module PG
         EOD
       end
 
-      # define all regular Client query methods
       %w(
-        exec              send_query
-        exec_prepared     send_query_prepared
-        prepare           send_prepare
-        describe_prepared send_describe_prepared
-        describe_portal   send_describe_portal
-          ).each_slice(2) do |name, send_name|
-        async_name = "async_#{name}"
+        exec              async_exec
+        exec_params       async_exec_params
+        exec_prepared     async_exec_prepared
+        prepare           async_prepare
+        describe_prepared async_describe_prepared
+        describe_portal   async_describe_portal
+          ).each do |name|
 
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
             execute { |pg| pg.#{name}(*args, &blk) }
           end
         EOD
-        class_eval <<-EOD, __FILE__, __LINE__
-          def #{async_name}(*args, &blk)
-            execute { |pg| pg.#{async_name}(*args, &blk) }
-          end
-        EOD
+      end
+
+      %w(
+        send_query
+        send_query_prepared
+        send_prepare
+        send_describe_prepared
+        send_describe_portal
+          ).each do |send_name|
+
         class_eval <<-EOD, __FILE__, __LINE__
           def #{send_name}(*args, &blk)
             execute(true) do |pg|
@@ -116,7 +154,8 @@ module PG
       # Calls to transaction may be nested,
       # however without sub-transactions (save points).
       #
-      # See PG::EM::Client#transaction and #execute
+      # @see Client#transaction
+      # @see #execute
       def transaction(&blk)
         execute do |pg|
           pg.transaction(&blk)
@@ -125,12 +164,14 @@ module PG
 
       # Acquires connection and passes it to the given block.
       #
-      # If async is true does not releases connection upon block termination.
-      # The async feature is used only internally - release is a private method.
+      # If +async+ is true the connection is not released back to the
+      # available pool upon block termination.
+      # The async feature is used only internally - +#release()+ is a private method.
       #
       # It is possible to nest execute calls from the same fiber,
-      # so each time the block will be given the same Client instance.
+      # so each time the block will be given the same {Client} instance.
       # This feature is needed e.g. for nesting transaction calls.
+      # @yieldparam [Client] pg
       def execute(async = false)
         fiber = Fiber.current
         if conn = @reserved[fiber.object_id]

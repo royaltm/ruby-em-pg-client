@@ -105,17 +105,18 @@ module PG
     # PG::EM::Client is a wrapper for PG::Connection[http://deveiate.org/code/pg/PG/Connection.html]
     # which (re)defines methods:
     #
-    # - +async_exec+ (alias: +async_query+)
-    # - +async_prepare+
-    # - +async_exec_prepared+
-    # - +async_describe_prepared+
-    # - +async_describe_portal+
+    # - {#send_query} (aliased as: +async_exec+, +async_query+, +async_exec_params+)
+    # - {#send_prepare} (aliased as: +async_prepare+)
+    # - {#send_query_prepared} (aliased as: +async_exec_prepared+)
+    # - {#send_describe_prepared} (aliased as: +async_describe_prepared+)
+    # - {#send_describe_portal} (aliased as: +async_describe_portal+)
     #
     # which are suitable to run in EM event loop (they return +Deferrable+)
     #
     # and following:
     #
     # - +exec+ (alias: +query+)
+    # - +exec_params+ (if supported by underlying pg)
     # - +prepare+
     # - +exec_prepared+
     # - +describe_prepared+
@@ -127,11 +128,11 @@ module PG
     # Additionally to the above, there are asynchronous methods defined for
     # establishing connection and re-connecting:
     #
-    # - +Client.async_connect+
-    # - +async_reset+
+    # - {Client.async_connect}
+    # - {#async_reset}
     #
-    # They are async equivalents of PG::Connection.connect (which is also
-    # aliased by PG::Connection as +new+, +open+, +setdb+, +setdblogin+) and
+    # They are async equivalents of PG::Connection.new (which is also
+    # aliased by PG::Connection as +connect+, +open+, +setdb+, +setdblogin+) and
     # +reset+.
     #
     # When #async_autoreconnect is +true+, async methods might try to
@@ -159,56 +160,67 @@ module PG
       include Errors
 
 
-      # Connection timeout. Changing this property only affects
-      # ::async_connect and #async_reset.
-      # However if passed as initialization option, it also affects blocking
-      # ::new and #reset.
+      # @!attribute connect_timeout
+      #   @return [Float] connection timeout in seconds
+      #   Connection timeout. Changing this property only affects
+      #   {async_connect} and {#async_reset}.
+      #
+      #   However if passed as initialization option, it also affects blocking
+      #   +new+ and {#reset}.
       attr_accessor :connect_timeout
 
-      # Aborts async command processing if waiting for response from server
-      # exceedes +query_timeout+ seconds. This does not apply to
-      # ::async_connect and #async_reset. For them
-      # use +connect_timeout+ instead.
+      # @!attribute query_timeout
+      #   @return [Float] query timeout in seconds
+      #   Aborts async command processing if waiting for response from server
+      #   exceedes +query_timeout+ seconds. This does not apply to
+      #   {async_connect} and {#async_reset}. For them
+      #   use +connect_timeout+ instead.
       #
-      # To enable it set to seconds (> 0). To disable: set to 0.
-      # You can also specify this as initialization option.
+      #   To enable it set to seconds (> 0). To disable: set to 0.
+      #   You can also specify this as initialization option.
       attr_accessor :query_timeout
 
-      # Enable/disable auto-reconnect feature (+true+/+false+).
-      # Defaults to +false+. However it is implicitly set to +true+
-      # if #on_autoreconnect is specified as initialization option.
-      # Changing #on_autoreconnect with accessor method doesn't change
-      # #async_autoreconnect.
+      # @!attribute async_autoreconnect
+      #   @return [Boolean] asynchronous auto re-connect status
+      #   Enable/disable auto re-connect feature (+true+/+false+).
+      #   Defaults to +false+. However it is implicitly set to +true+
+      #   if {#on_autoreconnect} is specified as initialization option.
+      #
+      #   However changing {#on_autoreconnect} with accessor method doesn't change
+      #   #async_autoreconnect.
       attr_accessor :async_autoreconnect
 
-      # +on_autoreconnect+ is a user defined Proc that is called after a connection
-      # with the server has been re-established.
-      # It's invoked with two arguments. First one is the +connection+.
-      # The second is the original +exception+ that caused the reconnecting process.
+      # @!attribute on_autoreconnect
+      #   @return [Proc<Client, Error>] auto re-connect hook
+      #   +on_autoreconnect+ is a user defined Proc that is called after a connection
+      #   with the server has been re-established.
+      #   It's invoked with two arguments. First one is the +connection+.
+      #   The second is the original +exception+ that caused the reconnecting process.
       #
-      # Certain rules should apply to #on_autoreconnect proc:
+      #   Certain rules should apply to +#on_autoreconnect+ proc:
       #
-      # - If proc returns +false+ (explicitly, +nil+ is ignored),
-      #   the original +exception+ is passed to Defferable's +errback+ and
-      #   the send query command is not invoked at all.
-      # - If return value is an instance of exception, it is passed to
-      #   Defferable's +errback+ and the send query command is not invoked at all.
-      # - If return value responds to +callback+ and +errback+ methods,
-      #   the send query command will be bound to value's success +callback+
-      #   and the original Defferable's +errback+ or value's +errback+.
-      # - Other return values are ignored and the send query command is called
-      #   immediately after #on_autoreconnect proc is executed.
+      #   - If proc returns +false+ (explicitly, +nil+ is ignored),
+      #     the original +exception+ is passed to Defferable's +errback+ and
+      #     the send query command is not invoked at all.
+      #   - If return value is an instance of exception, it is passed to
+      #     Defferable's +errback+ and the send query command is not invoked at all.
+      #   - If return value responds to +callback+ and +errback+ methods,
+      #     the send query command will be bound to value's success +callback+
+      #     and the original Defferable's +errback+ or value's +errback+.
+      #   - Other return values are ignored and the send query command is called
+      #     immediately after #on_autoreconnect proc is executed.
       #
-      # You may pass this proc as +:on_autoreconnect+ option to ::new.
+      #   You may pass this proc as +:on_autoreconnect+ option to ::new.
       #
-      # Example:
-      #   pg.on_autoreconnect = proc do |conn, ex|
-      #     conn.prepare("species_by_name", 
-      #      "select id, name from animals where species=$1 order by name")
-      #   end
+      #   @example How to use prepare in on_autoreconnect hook
+      #     pg.on_autoreconnect = proc do |conn, ex|
+      #       conn.prepare("species_by_name", 
+      #        "select id, name from animals where species=$1 order by name")
+      #     end
       #
       attr_accessor :on_autoreconnect
 
+      # @!visibility private
       # Used internally for marking connection as aborted on query timeout.
       attr_accessor :async_command_aborted
 
@@ -346,6 +358,7 @@ module PG
         end
       end
 
+      # @!visibility private
       def self.parse_async_args(args)
         async_args = {
           :@async_autoreconnect => nil,
@@ -381,19 +394,26 @@ module PG
         async_args
       end
 
+      # @!group Asynchronous connection methods
+
       # Attempts to establish the connection asynchronously.
-      # For args see PG::Connection.new[http://deveiate.org/code/pg/PG/Connection.html#method-c-new].
-      # Returns +Deferrable+. Use its +callback+ to obtain newly created and
-      # already connected PG::EM::Client object.
-      # If block is provided, it's bound to +callback+ and +errback+ of returned
-      # +Deferrable+.
       #
-      # Special PG::EM::Client options (e.g.: +async_autoreconnect+) must be provided
+      # @return [FeaturedDeferrable]
+      # @yieldparam pg [Client|Error] new and connected client instance on success or an {Error}
+      #
+      # Use the returned deferrable's hooks +callback+ and +errback+ to obtain
+      # newly created and already connected {Client} object.
+      # If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      # Special {Client} options (e.g.: {#async_autoreconnect}) must be provided
       # as +connection_hash+ argument variant. They will be ignored in +connection_string+.
-      # 
-      # +client_encoding+ *will* be set for you according to Encoding.default_internal.
       #
-      # raises ConnectionError or ConnectionTimeoutError on timeout
+      # +client_encoding+ *will* be set for you according to +Encoding.default_internal+.
+      #
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
+      # @raise [ConnectionRefusedError] if there was an immediate connection error
+      #  (it may happen while using unix sockets)
+      # @raise [ConnectionTimeoutError] on timeout
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(args)
@@ -406,13 +426,16 @@ module PG
       end
 
       # Attempts to reset the connection asynchronously.
-      # There are no arguments, except block argument.
       #
-      # Returns +Deferrable+. Use it's +callback+ to handle success.
-      # If block is provided, it's bound to +callback+ and +errback+ of returned
-      # +Deferrable+.
+      # @return [FeaturedDeferrable]
+      # @yieldparam pg [Client|Error] reconnected client instance on success or an {Error}
       #
-      # raises ConnectionError or ConnectionTimeoutError on timeout
+      # Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
+      # If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      # @raise [ConnectionRefusedError] if there was an immediate connection error
+      #  (it may happen while using unix sockets)
+      # @raise [ConnectionTimeoutError] on timeout
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
@@ -423,28 +446,38 @@ module PG
         df
       end
 
-      # Uncheck #async_command_aborted on blocking reset.
+      # @!endgroup
+      # @!group Synchronous connection methods
+
+      # Resets {#async_command_aborted} on blocking reset then
+      # calls original PG::Connection#reset[http://deveiate.org/code/pg/PG/Connection.html#method-i-reset].
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
       def reset
         @async_command_aborted = false
         super
       end
 
-      # Creates new instance of PG::EM::Client and attempts to establish connection.
-      # See PG::Connection.new[http://deveiate.org/code/pg/PG/Connection.html#method-c-new].
+      # Creates new instance of PG::EM::Client and attempts to establish connection synchronously.
       #
-      # Special PG::EM::Client options (e.g.: +async_autoreconnect+) must be provided
+      # Special {Client} options (e.g.: {#async_autoreconnect}) must be provided
       # as +connection_hash+ argument variant. They will be ignored in +connection_string+.
-      # 
+      #
       # +em-synchrony+ version *will* do set +client_encoding+ for you according to
-      # Encoding.default_internal.
+      # +Encoding.default_internal+.
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
       def initialize(*args)
         Client.parse_async_args(args).each {|k, v| self.instance_variable_set(k, v) }
         super(*args)
       end
 
-      # Return +CONNECTION_BAD+ for connections with +async_command_aborted+
-      # flag set by expired query timeout. Otherwise return whatever
-      # PG::Connection#status[http://deveiate.org/code/pg/PG/Connection.html#method-i-status] provides.
+      # @!endgroup
+
+      # Returns status of connection.
+      #
+      # @return [Number]
+      # Returns +PG::CONNECTION_BAD+ for connections with +async_command_aborted+
+      # flag set by expired query timeout. Otherwise return whatever PG::Connection#status returns.
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-status PG::Connection#status
       def status
         if @async_command_aborted
           PG::CONNECTION_BAD
@@ -453,7 +486,8 @@ module PG
         end
       end
 
-      # Perform autoreconnect. Used internally.
+      # @!visibility private
+      # Perform auto re-connect. Used internally.
       def async_autoreconnect!(deferrable, error, &send_proc)
         if self.status != PG::CONNECTION_OK
           if async_autoreconnect
@@ -485,13 +519,87 @@ module PG
         end
       end
 
+      # @!group Asynchronous command methods
+
+      # @!method send_query(sql, params=nil, result_format=nil, &blk)
+      #   Sends SQL query request specified by +sql+ to PostgreSQL for asynchronous processing,
+      #   and immediately returns with +deferrable+.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable]
+      #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
+      #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_query PG::Connection#send_query
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec PG::Connection#exec
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_params PG::Connection#exec_params
+      #
+      # @!parse alias_method :async_exec, :send_query
+      # @!parse alias_method :async_exec_params, :send_query
+      # @!parse alias_method :async_query, :send_query
+      #
+      # @!method send_prepare(stmt_name, sql, param_types=nil, &blk)
+      #   Prepares statement +sql+ with name +stmt_name+ to be executed later asynchronously,
+      #   and immediately returns with deferrable.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable]
+      #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
+      #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_prepare PG::Connection#send_prepare
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-prepare PG::Connection#prepare
+      #
+      # @!parse alias_method :async_prepare, :send_prepare
+      #
+      # @!method send_query_prepared(statement_name, params=nil, result_format=nil, &blk)
+      #   Execute prepared named statement specified by +statement_name+ asynchronously,
+      #   and immediately returns with deferrable.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable]
+      #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
+      #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_query_prepared PG::Connection#send_query_prepared
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_prepared PG::Connection#send_exec_prepared
+      #
+      # @!parse alias_method :async_exec_prepared, :send_query_prepared
+      #
+      # @!method send_describe_prepared(statement_name, &blk)
+      #   Asynchronously sends command to retrieve information about the prepared statement +statement_name+,
+      #   and immediately returns with deferrable.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable]
+      #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
+      #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_describe_prepared PG::Connection#send_describe_prepared
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_prepared PG::Connection#describe_prepared
+      #
+      # @!parse alias_method :async_describe_prepared, :send_describe_prepared
+      #
+      # @!method send_describe_portal(portal_name, &blk)
+      #   Asynchronously sends command to retrieve information about the portal +portal_name+,
+      #   and immediately returns with deferrable.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable]
+      #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
+      #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_describe_portal PG::Connection#send_describe_portal
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_portal PG::Connection#describe_portal
+      #
+      # @!parse alias_method :async_describe_portal, :send_describe_portal
       %w(
-        exec              send_query
-        prepare           send_prepare
-        exec_prepared     send_query_prepared
-        describe_prepared send_describe_prepared
-        describe_portal   send_describe_portal
-          ).each_slice(2) do |name, send_name|
+        send_query
+        send_prepare
+        send_query_prepared
+        send_describe_prepared
+        send_describe_portal
+          ).each do |send_name|
 
         class_eval <<-EOD, __FILE__, __LINE__
         def #{send_name}(*args, &blk)
@@ -512,6 +620,98 @@ module PG
         end
         EOD
 
+      end
+
+      # @!endgroup
+
+      # @!group Auto-sensing sync/async command methods
+
+      # @!method exec(sql, &blk)
+      #   Sends SQL query request specified by +sql+ to PostgreSQL.
+      #
+      #   Returns immediately with deferrable if EM reactor is running, otherwise acts exactly like PG::Connection#exec.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable] if EventMachine reactor is running (asynchronous)
+      #   @return [PG::Result] if EventMachine reactor is stopped (synchronous)
+      #   If the block is provided and EM reactor is running it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see #send_query
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec PG::Connection#exec
+      #
+      # @!method exec_params(sql, params=nil, result_format=nil, &blk)
+      #   Sends SQL query request specified by +sql+ with optional +params+ and +result_format+ to PostgreSQL.
+      #
+      #   Returns immediately with deferrable if EM reactor is running, otherwise acts exactly like PG::Connection#exec_params.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable] if EventMachine reactor is running (asynchronous)
+      #   @return [PG::Result] if EventMachine reactor is stopped (synchronous)
+      #   If the block is provided and EM reactor is running it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see #send_query
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_params PG::Connection#exec_params
+      #
+      # @!method prepare(stmt_name, sql, param_types=nil, &blk)
+      #   Prepares statement +sql+ with name +stmt_name+ to be executed later.
+      #
+      #   Returns immediately with deferrable if EM reactor is running, otherwise acts exactly like PG::Connection#prepare.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable] if EventMachine reactor is running (asynchronous)
+      #   @return [PG::Result] if EventMachine reactor is stopped (synchronous)
+      #   If the block is provided and EM reactor is running it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see #send_prepare
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-prepare PG::Connection#prepare
+      #
+      # @!method exec_prepared(statement_name, params=nil, result_format=nil, &blk)
+      #   Execute prepared named statement specified by +statement_name+.
+      #
+      #   Returns immediately with deferrable if EM reactor is running, otherwise acts exactly like PG::Connection#exec_prepared.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable] if EventMachine reactor is running (asynchronous)
+      #   @return [PG::Result] if EventMachine reactor is stopped (synchronous)
+      #   If the block is provided and EM reactor is running it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see #send_query_prepared
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_prepared PG::Connection#exec_prepared
+      #
+      # @!method describe_prepared(statement_name, &blk)
+      #   Retrieve information about the prepared statement +statement_name+,
+      #
+      #   Returns immediately with deferrable if EM reactor is running, otherwise acts exactly like PG::Connection#describe_prepared.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable] if EventMachine reactor is running (asynchronous)
+      #   @return [PG::Result] if EventMachine reactor is stopped (synchronous)
+      #   If the block is provided and EM reactor is running it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see #send_describe_prepared
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_prepared PG::Connection#describe_prepared
+      #
+      # @!method describe_portal(portal_name, &blk)
+      #   Retrieve information about the portal +portal_name+,
+      #
+      #   Returns immediately with deferrable if EM reactor is running, otherwise acts exactly like PG::Connection#describe_portal.
+      #
+      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @return [FeaturedDeferrable] if EventMachine reactor is running (asynchronous)
+      #   @return [PG::Result] if EventMachine reactor is stopped (synchronous)
+      #   If the block is provided and EM reactor is running it's bound to +callback+ and +errback+ hooks of the returned deferrable.
+      #
+      #   @see #send_describe_portal
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_portal PG::Connection#describe_portal
+      %w(
+        exec              send_query
+        exec_params       send_query
+        prepare           send_prepare
+        exec_prepared     send_query_prepared
+        describe_prepared send_describe_prepared
+        describe_portal   send_describe_portal
+          ).each_slice(2) do |name, send_name|
+
         alias_method :"async_#{name}", :"#{send_name}"
 
         class_eval <<-EOD, __FILE__, __LINE__
@@ -526,8 +726,10 @@ module PG
 
       end
 
+      # @!endgroup
+
       alias_method :query, :exec
-      alias_method :async_query, :async_exec
+      alias_method :async_query, :send_query
 
       # support for pg < 0.14.0
       unless method_defined? :set_default_encoding
@@ -563,6 +765,8 @@ module PG
 
     module EM
       class Client < PG::Connection
+        # Simulates pg >= 0.14 PG::Result with @connection instance variable.
+        # Not defined for pg >= 0.14 or later.
         def get_result(&blk)
           result = super(&blk)
           result.instance_variable_set(:@connection, self) unless block_given?

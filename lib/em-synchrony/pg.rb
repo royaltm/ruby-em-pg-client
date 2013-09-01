@@ -5,12 +5,149 @@ module PG
     module Errors
       class TransactionError < QueryError; end
     end
+    # @!macro auto_synchrony_api
+    #   Performs command asynchronously using {#async_$0}
+    #   if EM reactor is running, otherwise acts exactly like PG::Connection#$0.
+    #
+    #   @return [PG::Result] if block wasn't given
+    #   @return [Object] if block given returns anything block.call returns
+    #   @raise [Error]
+    #   @see #async_$0
+    #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-$0 PG::Connection#$0
+
+    # @!macro pure_synchrony_api
+    #   Performs command asynchronously yielding current fiber and ensuring
+    #   that other fibers can process while waiting for the server
+    #   to complete the request.
+    #
+    #   @yieldparam result [PG::Result] command result on success
+    #   @return [PG::Result] if block wasn't given
+    #   @return [Object] if block given returns anything block.call returns
+    #   @raise [Error]
+
+    # @!parse
+    #   # @note This class is non-existent. Don't try to use it. Instead use {Client} class.
+    #   # Its purpose here is solely for documenting methods of {Client} which are redefined
+    #   # when this file is being loaded:
+    #   #   require 'em-synchrony/pg'
+    #   # The redefined methods are fit for Fiber-entangled environment for EM.
+    #   class SynchronyClient < Client
+    #     include Errors
+    #
+    #     # @!group Auto-sensing sync/async command methods
+    #
+    #     # Sends SQL query request specified by +sql+ to PostgreSQL.
+    #     #
+    #     # @macro auto_synchrony_api
+    #     def exec(sql, &blk); end
+    #     alias_method :query, :exec
+    #
+    #     # Sends SQL query request specified by +sql+ with optional +params+ and +result_format+ to PostgreSQL.
+    #     #
+    #     # @macro auto_synchrony_api
+    #     def exec_params(sql, params=nil, result_format=nil, &blk); end
+    #
+    #     # Prepares statement +sql+ with name +stmt_name+ to be executed later.
+    #     #
+    #     # @macro auto_synchrony_api
+    #     def prepare(stmt_name, sql, param_types=nil, &blk); end
+    #
+    #     # Execute prepared named statement specified by +statement_name+.
+    #     #
+    #     # @macro auto_synchrony_api
+    #     def exec_prepared(statement_name, params=nil, result_format=nil, &blk); end
+    #
+    #     # Retrieve information about the prepared statement +statement_name+,
+    #     #
+    #     # @macro auto_synchrony_api
+    #     def describe_prepared(statement_name, &blk); end
+    #
+    #     # Retrieve information about the portal +portal_name+.
+    #     #
+    #     # @macro auto_synchrony_api
+    #     def describe_portal(portal_name, &blk); end
+    #
+    #     # @!endgroup
+    #
+    #
+    #     # @!group Asynchronous command methods
+    #
+    #     # @!method async_exec(sql, &blk)
+    #     #   Sends SQL query request specified by +sql+ to PostgreSQL.
+    #     #
+    #     #   @macro pure_synchrony_api
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-async_exec PG::Connection#async_exec
+    #     alias_method :async_query, :async_exec
+    #
+    #     # @!method async_exec_params(sql, params=nil, result_format=nil, &blk)
+    #     #   Sends SQL query request specified by +sql+ with optional +params+ and +result_format+ to PostgreSQL.
+    #     #
+    #     #   @macro pure_synchrony_api
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-async_exec PG::Connection#async_exec
+    #
+    #     # @!method async_prepare(stmt_name, sql, param_types=nil, &blk)
+    #     #   Prepares statement +sql+ with name +stmt_name+ to be executed later.
+    #     #
+    #     #   @macro pure_synchrony_api
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-prepare PG::Connection#prepare
+    #
+    #     # @!method async_exec_prepared(statement_name, params=nil, result_format=nil, &blk)
+    #     #   Execute prepared named statement specified by +statement_name+.
+    #     #
+    #     #   @macro pure_synchrony_api
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_prepared PG::Connection#exec_prepared
+    #
+    #     # @!method async_describe_prepared(statement_name, &blk)
+    #     #   Retrieve information about the prepared statement +statement_name+,
+    #     #
+    #     #   @macro pure_synchrony_api
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_prepared PG::Connection#describe_prepared
+    #
+    #     # @!method async_describe_portal(portal_name, &blk)
+    #     #   Retrieve information about the portal +portal_name+.
+    #     #
+    #     #   @macro pure_synchrony_api
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_portal PG::Connection#describe_portal
+    #
+    #     # @!endgroup
+    #
+    #     # @!group Auto-sensing sync/async connection methods
+    #
+    #     # @!method reset
+    #     #   Attempts to reset the connection asynchronously (yielding current fiber)
+    #     #   if EM reactor is running, otherwise acts exactly like its synchronous version.
+    #     #
+    #     #   @return [Client] reconnected client instance
+    #     #   @raise [ConnectionRefusedError] if there was a connection error
+    #     #   @raise [ConnectionTimeoutError] on timeout
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
+    #
+    #     # @!method self.connect(*args, &blk)
+    #     #   Attempts to establish the connection asynchronously (yielding current fiber)
+    #     #   if EM reactor is running, otherwise acts exactly like its synchronous version.
+    #     #
+    #     #   @return [Client] new and connected client instance
+    #     #   @raise [ConnectionRefusedError] if there was a connection error
+    #     #   @raise [ConnectionTimeoutError] on timeout
+    #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
+    #
+    #     # @!scope class
+    #     alias_method :new, :connect
+    #     # @!scope class
+    #     alias_method :open, :connect
+    #     # @!scope class
+    #     alias_method :setdb, :connect
+    #     # @!scope class
+    #     alias_method :setdblogin, :connect
+    #
+    #     # @!endgroup
+    #
+    #   end
     class Client
       # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
       # Licence:: MIT License
       #
       # =PostgreSQL Client for EM-Synchrony/Fibered EventMachine
-      #
 
       alias_method :aquery, :send_query
 
@@ -39,6 +176,7 @@ module PG
       # - Client.connect
       %w(
         exec              send_query
+        exec_params       send_query
         exec_prepared     send_query_prepared
         prepare           send_prepare
         describe_prepared send_describe_prepared
@@ -115,14 +253,15 @@ module PG
 
       alias_method :async_query, :async_exec
 
+      TRAN_BEGIN_QUERY = 'BEGIN'
+      TRAN_ROLLBACK_QUERY = 'ROLLBACK'
+      TRAN_COMMIT_QUERY = 'COMMIT'
       # Executes a BEGIN at the start of the block
       # and a COMMIT at the end of the block
       # or ROLLBACK if any exception occurs.
       # Calls to transaction may be nested,
       # however without sub-transactions (save points).
-      TRAN_BEGIN_QUERY = 'BEGIN'
-      TRAN_ROLLBACK_QUERY = 'ROLLBACK'
-      TRAN_COMMIT_QUERY = 'COMMIT'
+      # @version synchrony-only
       def transaction(&blk)
         tcount = @client_tran_count.to_i
         case transaction_status
@@ -160,6 +299,8 @@ module PG
         end
       end
 
+      # @!visibility private
+      # Perform auto re-connect. Used internally. Synchrony version.
       def async_autoreconnect!(deferrable, error, &send_proc)
         if self.status != PG::CONNECTION_OK
           if async_autoreconnect
@@ -192,7 +333,6 @@ module PG
           ::EM.next_tick { deferrable.fail(QueryError.wrap(error)) }
         end
       end
-
     end
   end
 end
