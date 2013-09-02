@@ -75,7 +75,7 @@ end
 
 desc "Documentation"
 task :doc do
-  sh "yardoc - BENCHMARKS.md LICENCE"
+  sh "yardoc"
 end
 
 desc "Benchmark"
