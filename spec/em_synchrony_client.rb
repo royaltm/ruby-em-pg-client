@@ -41,7 +41,7 @@ describe PG::EM::Client do
 
   it "should populate foo with some data " do
     results = @values.map do |(data, id)|
-      @client.query('INSERT INTO foo (id,cdate,data) VALUES($1,$2,$3) returning cdate', [id, DateTime.now, data]) do |result|
+      @client.exec_params('INSERT INTO foo (id,cdate,data) VALUES($1,$2,$3) returning cdate', [id, DateTime.now, data]) do |result|
         result.should be_an_instance_of PG::Result
         DateTime.parse(result[0]['cdate'])
       end
@@ -250,6 +250,224 @@ describe PG::EM::Client do
       @client.reset
       @client.async_command_aborted.should be_false
       @client.status.should be PG::CONNECTION_OK
+    end
+  end
+
+  describe 'PG::EM::Client#transaction' do
+
+    it "should commit transaction and return whatever block yields" do
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.transaction do |pg|
+        pg.should be @client
+        @client.transaction_status.should be PG::PQTRANS_INTRANS
+        @client.instance_variable_get(:@client_tran_count).should eq 1
+        @client.query(
+          'DROP TABLE IF EXISTS bar'
+        ).should be_an_instance_of PG::Result
+        @client.query(
+          'CREATE TABLE bar (key integer, value varchar)'
+        ).should be_an_instance_of PG::Result
+        @client.query("INSERT INTO bar (key,value) VALUES(42,'xyz') returning value") do |result|
+          result.should be_an_instance_of PG::Result
+          result[0]['value']
+        end
+      end.should eq 'xyz'
+      @client.query('SELECT * FROM bar') do |result|
+        result.should be_an_instance_of PG::Result
+        result[0]['key'].should eq '42'
+      end
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.instance_variable_get(:@client_tran_count).should eq 0
+    end
+
+    it "should rollback transaction on error and raise that error" do
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      expect do
+        @client.transaction do |pg|
+          pg.should be @client
+          @client.transaction_status.should be PG::PQTRANS_INTRANS
+          @client.instance_variable_get(:@client_tran_count).should eq 1
+          @client.query(
+            "INSERT INTO bar (key,value) VALUES(11,'abc')"
+          ).should be_an_instance_of PG::Result
+          @client.query('SELECT * FROM bar ORDER BY key') do |result|
+            result.should be_an_instance_of PG::Result
+            result[0]['key'].should eq '11'
+          end
+          @client.query('SELECT count(*) AS count FROM bar') do |result|
+            result.should be_an_instance_of PG::Result
+            result[0]['count'].should eq '2'
+          end
+          raise "rollback"
+        end
+      end.to raise_error(RuntimeError, /rollback/)
+      @client.query('SELECT count(*) AS count FROM bar') do |result|
+        result.should be_an_instance_of PG::Result
+        result[0]['count'].should eq '1'
+      end
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.instance_variable_get(:@client_tran_count).should eq 0
+    end
+
+    it "should allow nesting transaction and return whatever innermost block yields" do
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.transaction do |pg|
+        pg.should be @client
+        @client.transaction_status.should be PG::PQTRANS_INTRANS
+        @client.instance_variable_get(:@client_tran_count).should eq 1
+        @client.query(
+          "INSERT INTO bar (key,value) VALUES(100,'hundred') returning value"
+        ).should be_an_instance_of PG::Result
+        @client.transaction do |pg|
+          pg.should be @client
+          @client.transaction_status.should be PG::PQTRANS_INTRANS
+          @client.instance_variable_get(:@client_tran_count).should eq 2
+          @client.query(
+            "INSERT INTO bar (key,value) VALUES(1000,'thousand') returning value"
+          ).should be_an_instance_of PG::Result
+          @client.transaction do |pg|
+            pg.should be @client
+            @client.transaction_status.should be PG::PQTRANS_INTRANS
+            @client.instance_variable_get(:@client_tran_count).should eq 3
+            @client.query("INSERT INTO bar (key,value) VALUES(1000000,'million') returning value")
+          end
+        end
+      end.tap do |result|
+        result.should be_an_instance_of PG::Result
+        result[0]['value'].should eq 'million'
+      end
+      @client.query('SELECT key,value FROM bar ORDER BY key') do |result|
+        result.should be_an_instance_of PG::Result
+        result.column_values(0).should eq ['42','100','1000','1000000']
+        result.column_values(1).should eq ['xyz','hundred','thousand','million']
+      end
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.instance_variable_get(:@client_tran_count).should eq 0
+    end
+
+    it "should allow nesting transaction and rollback from the innermost block error" do
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      expect do
+        @client.transaction do |pg|
+          pg.should be @client
+          @client.transaction_status.should be PG::PQTRANS_INTRANS
+          @client.instance_variable_get(:@client_tran_count).should eq 1
+          @client.query(
+            "INSERT INTO bar (key,value) VALUES(200,'two hundred') returning value"
+          ).should be_an_instance_of PG::Result
+          @client.transaction do |pg|
+            pg.should be @client
+            @client.transaction_status.should be PG::PQTRANS_INTRANS
+            @client.instance_variable_get(:@client_tran_count).should eq 2
+            @client.query(
+              "INSERT INTO bar (key,value) VALUES(2000,'two thousands') returning value"
+            ).should be_an_instance_of PG::Result
+            @client.transaction do |pg|
+              pg.should be @client
+              @client.transaction_status.should be PG::PQTRANS_INTRANS
+              @client.instance_variable_get(:@client_tran_count).should eq 3
+              @client.query(
+                "INSERT INTO bar (key,value) VALUES(2000000,'two millions') returning value"
+              ).should be_an_instance_of PG::Result
+              raise "rollback from here"
+            end
+          end
+        end
+      end.to raise_error(RuntimeError, /rollback from here/)
+      @client.query('SELECT key,value FROM bar ORDER BY key') do |result|
+        result.should be_an_instance_of PG::Result
+        result.column_values(0).should eq ['42','100','1000','1000000']
+        result.column_values(1).should eq ['xyz','hundred','thousand','million']
+      end
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.instance_variable_get(:@client_tran_count).should eq 0
+    end
+
+    it "should allow rollback on rescued sql error from nested transaction" do
+      flag = false
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.transaction do |pg|
+        pg.should be @client
+        @client.transaction_status.should be PG::PQTRANS_INTRANS
+        @client.instance_variable_get(:@client_tran_count).should eq 1
+        @client.query(
+          "INSERT INTO bar (key,value) VALUES(300,'three hundred') returning value"
+        ).should be_an_instance_of PG::Result
+        @client.transaction do |pg|
+          pg.should be @client
+          @client.transaction_status.should be PG::PQTRANS_INTRANS
+          @client.instance_variable_get(:@client_tran_count).should eq 2
+          @client.query(
+            "INSERT INTO bar (key,value) VALUES(3000,'three thousands') returning value"
+          ).should be_an_instance_of PG::Result
+          @client.transaction do |pg|
+            pg.should be @client
+            @client.transaction_status.should be PG::PQTRANS_INTRANS
+            @client.instance_variable_get(:@client_tran_count).should eq 3
+            expect {
+              @client.query('SRELECT CURRENT_TIMESTAMP')
+            }.to raise_error(PG::EM::Errors::QueryError, /syntax error/)
+            @client.transaction_status.should be PG::PQTRANS_INERROR
+            @client.instance_variable_get(:@client_tran_count).should eq 3
+            expect {
+              @client.query('SELECT CURRENT_TIMESTAMP')
+            }.to raise_error(PG::EM::Errors::QueryError, /transaction is aborted/)
+            @client.transaction_status.should be PG::PQTRANS_INERROR
+            @client.instance_variable_get(:@client_tran_count).should eq 3
+            expect do
+              @client.transaction { 'foo' }
+            end.to raise_error(PG::EM::Errors::TransactionError, /error in transaction, need ROLLBACK/)
+            @client.transaction_status.should be PG::PQTRANS_INERROR
+            @client.instance_variable_get(:@client_tran_count).should eq 3
+            flag = :was_here
+          end
+          @client.transaction_status.should be PG::PQTRANS_INERROR
+          @client.instance_variable_get(:@client_tran_count).should eq 2
+          expect {
+            @client.query('SELECT CURRENT_TIMESTAMP')
+          }.to raise_error(PG::EM::Errors::QueryError, /transaction is aborted/)
+          expect do
+            @client.transaction { 'foo' }
+          end.to raise_error(PG::EM::Errors::TransactionError, /error in transaction, need ROLLBACK/)
+          @client.transaction_status.should be PG::PQTRANS_INERROR
+          @client.instance_variable_get(:@client_tran_count).should eq 2
+        end
+        @client.transaction_status.should be PG::PQTRANS_INERROR
+        @client.instance_variable_get(:@client_tran_count).should eq 1
+        expect {
+          @client.query('SELECT CURRENT_TIMESTAMP')
+        }.to raise_error(PG::EM::Errors::QueryError, /transaction is aborted/)
+        expect do
+          @client.transaction { 'foo' }
+        end.to raise_error(PG::EM::Errors::TransactionError, /error in transaction, need ROLLBACK/)
+        @client.transaction_status.should be PG::PQTRANS_INERROR
+        @client.instance_variable_get(:@client_tran_count).should eq 1
+      end
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      @client.instance_variable_get(:@client_tran_count).should eq 0
+      @client.transaction { 'foo' }.should eq 'foo'
+      @client.query('SELECT key,value FROM bar ORDER BY key') do |result|
+        result.should be_an_instance_of PG::Result
+        result.column_values(0).should eq ['42','100','1000','1000000']
+        result.column_values(1).should eq ['xyz','hundred','thousand','million']
+      end
+      flag.should be :was_here
+    end
+
+    it "should detect premature transaction state change" do
+      flag = false
+      @client.transaction_status.should be PG::PQTRANS_IDLE
+      expect do
+        @client.transaction do |pg|
+          pg.should be @client
+          @client.transaction_status.should be PG::PQTRANS_INTRANS
+          @client.instance_variable_get(:@client_tran_count).should eq 1
+          @client.query('ROLLBACK')
+          expect do
+            @client.transaction { 'foo' }
+          end.to raise_error(PG::EM::Errors::TransactionError, /^unable to begin nested transaction, current transaction was finished prematurely$/)
+        end
+      end.to raise_error(PG::EM::Errors::TransactionError, /^transaction was finished prematurely$/)
     end
   end
 

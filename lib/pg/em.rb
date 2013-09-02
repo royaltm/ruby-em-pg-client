@@ -731,6 +731,14 @@ module PG
       alias_method :query, :exec
       alias_method :async_query, :send_query
 
+      def transaction
+        if ::EM.reactor_running?
+          raise NotImplementedError
+        else
+          super
+        end
+      end
+
       # support for pg < 0.14.0
       unless method_defined? :set_default_encoding
         def set_default_encoding

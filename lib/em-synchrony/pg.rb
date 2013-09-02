@@ -10,7 +10,7 @@ module PG
     #   if EM reactor is running, otherwise acts exactly like PG::Connection#$0.
     #
     #   @return [PG::Result] if block wasn't given
-    #   @return [Object] if block given returns anything block.call returns
+    #   @return [Object] if block given returns result of the block
     #   @raise [Error]
     #   @see #async_$0
     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-$0 PG::Connection#$0
@@ -22,7 +22,7 @@ module PG
     #
     #   @yieldparam result [PG::Result] command result on success
     #   @return [PG::Result] if block wasn't given
-    #   @return [Object] if block given returns anything block.call returns
+    #   @return [Object] if block given returns result of the block
     #   @raise [Error]
 
     # @!parse
@@ -30,7 +30,7 @@ module PG
     #   # Its purpose here is solely for documenting methods of {Client} which are redefined
     #   # when this file is being loaded:
     #   #   require 'em-synchrony/pg'
-    #   # The redefined methods are fit for Fiber-entangled environment for EM.
+    #   # The methods described here are designed to be used in Fiber-entangled environment for EM.
     #   class SynchronyClient < Client
     #     include Errors
     #
@@ -143,7 +143,7 @@ module PG
     #     # @!endgroup
     #
     #   end
-    class Client
+    class Client < PG::Connection
       # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
       # Licence:: MIT License
       #
@@ -168,6 +168,7 @@ module PG
       # fiber aware and reactor-sensitive methods:
       # (synchronous while reactor is not running)
       # - exec (aliased as query)
+      # - exec_params
       # - exec_prepared
       # - prepare
       # - describe_prepared
@@ -256,20 +257,64 @@ module PG
       TRAN_BEGIN_QUERY = 'BEGIN'
       TRAN_ROLLBACK_QUERY = 'ROLLBACK'
       TRAN_COMMIT_QUERY = 'COMMIT'
-      # Executes a BEGIN at the start of the block
-      # and a COMMIT at the end of the block
-      # or ROLLBACK if any exception occurs.
-      # Calls to transaction may be nested,
-      # however without sub-transactions (save points).
-      # @version synchrony-only
-      def transaction(&blk)
+      # Executes a BEGIN at the start of the block and a COMMIT at the end
+      # of the block or ROLLBACK if any exception occurs.
+      #
+      # @note This method may *only* be used with +em-synchrony/pg+ version
+      # @return [Object] result of the block
+      # @yieldparam client [self]
+      # @version em-synchrony/pg only
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-transaction PG::Connection#transaction
+      #
+      # Calls to {#transaction} may be nested, however without sub-transactions
+      # (save points). If the innermost transaction block raises an error
+      # the transaction is rolled back to the state before the outermost
+      # transaction began.
+      # This is an extension to the +PG::Connection#transaction+ method
+      # as it does not support nesting.
+      #
+      # The method is sensitive to the transaction status and will safely
+      # rollback on any sql error even when it was catched by some rescue block.
+      # But consider that rescuing any sql error within an utility method
+      # is a bad idea.
+      #
+      # This method works in both sync/async modes (regardles of the reactor state)
+      # and is considered as a generic extension to the +PG::Connection#transaction+
+      # method.
+      #
+      # @example Nested transaction example
+      #  def add_comment(user_id, text)
+      #    db.transaction do
+      #      cmt_id = db.query(
+      #        'insert into comments (text) where user_id=$1 values ($2) returning id',
+      #        [user_id, text]).getvalue(0,0)
+      #      db.query(
+      #        'update users set last_comment_id=$2 where id=$1', [user_id, cmt_id])
+      #      cmt_id
+      #    end
+      #  end
+      #  
+      #  def update_comment_count(page_id)
+      #    db.transaction do
+      #      count = db.query('select count(*) from comments where page_id=$1', [page_id]).getvalue(0,0)
+      #      db.query('update pages set comment_count=$2 where id=$1', [page_id, count])
+      #    end
+      #  end
+      #
+      #  # to run add_comment and update_comment_count within the same transaction
+      #  db.transaction do
+      #    add_comment(user_id, some_text)
+      #    update_comment_count(page_id)
+      #  end
+      #
+      def transaction
         tcount = @client_tran_count.to_i
         case transaction_status
         when PG::PQTRANS_IDLE
           if tcount.zero?
             exec(TRAN_BEGIN_QUERY)
           else
-            raise TransactionError.new('transaction status was idle, but transaction count != 0', self)
+            raise TransactionError.new('unable to begin nested transaction, current transaction was finished prematurely', self)
           end
         when PG::PQTRANS_INTRANS
         else
@@ -277,11 +322,11 @@ module PG
         end
         @client_tran_count = tcount + 1
         begin
-          blk.call self
+          result = yield self
         rescue
           case transaction_status
           when PG::PQTRANS_INTRANS, PG::PQTRANS_INERROR
-            exec(TRAN_ROLLBACK_QUERY)
+            exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
           end
           raise
         else
@@ -289,11 +334,13 @@ module PG
           when PG::PQTRANS_INTRANS
             exec(TRAN_COMMIT_QUERY) if tcount.zero?
           when PG::PQTRANS_INERROR
-            exec(TRAN_ROLLBACK_QUERY)
-          when PG::PQTRANS_IDLE # rolled back before
+            exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
+          when PG::PQTRANS_IDLE
+            raise TransactionError.new('transaction was finished prematurely', self)
           else
             raise TransactionError.new('unkown transaction status', self)
           end
+          result
         ensure
           @client_tran_count = tcount
         end
