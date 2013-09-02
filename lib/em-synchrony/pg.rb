@@ -308,6 +308,7 @@ module PG
       #  end
       #
       def transaction
+        raise ArgumentError, 'Must supply block for PG::EM::Client#transaction' unless block_given?
         tcount = @client_tran_count.to_i
         case transaction_status
         when PG::PQTRANS_IDLE

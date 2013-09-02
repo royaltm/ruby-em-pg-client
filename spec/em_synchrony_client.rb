@@ -255,6 +255,12 @@ describe PG::EM::Client do
 
   describe 'PG::EM::Client#transaction' do
 
+    it "should raise ArgumentError when there is no block" do
+      expect do
+        @client.transaction
+      end.to raise_error(ArgumentError, /Must supply block for PG::EM::Client#transaction/)
+    end
+
     it "should commit transaction and return whatever block yields" do
       @client.transaction_status.should be PG::PQTRANS_IDLE
       @client.transaction do |pg|
@@ -345,7 +351,7 @@ describe PG::EM::Client do
       @client.instance_variable_get(:@client_tran_count).should eq 0
     end
 
-    it "should allow nesting transaction and rollback from the innermost block error" do
+    it "should allow nesting transaction and rollback on error" do
       @client.transaction_status.should be PG::PQTRANS_IDLE
       expect do
         @client.transaction do |pg|
