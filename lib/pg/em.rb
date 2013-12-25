@@ -739,48 +739,6 @@ module PG
         end
       end
 
-      # support for pg < 0.14.0
-      unless method_defined? :set_default_encoding
-        def set_default_encoding
-          unless Encoding.default_internal.nil?
-            self.internal_encoding = Encoding.default_internal
-          end
-        rescue EncodingError
-          warn "warning: Failed to set the default_internal encoding to #{Encoding.default_internal}: '#{self.error_message}'"
-          Encoding.default_internal
-        end
-      end
-
-    end
-  end
-
-  # support for pg < 0.14.0
-  unless Result.method_defined? :check
-    class Result
-      def check
-        case result_status
-          when PG::PGRES_BAD_RESPONSE,
-               PG::PGRES_FATAL_ERROR,
-               PG::PGRES_NONFATAL_ERROR
-            error = PG::Error.new(error_message)
-            error.instance_variable_set(:@result, self)
-            error.instance_variable_set(:@connection, @connection)
-            raise error
-        end
-      end
-      alias_method :check_result, :check
-    end
-
-    module EM
-      class Client < PG::Connection
-        # Simulates pg >= 0.14 PG::Result with @connection instance variable.
-        # Not defined for pg >= 0.14 or later.
-        def get_result(&blk)
-          result = super(&blk)
-          result.instance_variable_set(:@connection, self) unless block_given?
-          result
-        end
-      end
     end
   end
 
