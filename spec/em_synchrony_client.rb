@@ -417,12 +417,12 @@ describe PG::EM::Client do
             @client.instance_variable_get(:@client_tran_count).should eq 3
             expect {
               @client.query('SELECT CURRENT_TIMESTAMP')
-            }.to raise_error(ArgumentError, /transaction is aborted/)
+            }.to raise_error(PG::InFailedSqlTransaction, /transaction is aborted/)
             @client.transaction_status.should be PG::PQTRANS_INERROR
             @client.instance_variable_get(:@client_tran_count).should eq 3
             expect do
               @client.transaction { 'foo' }
-            end.to raise_error(PG::TransactionError, /error in transaction, need ROLLBACK/)
+            end.to raise_error(PG::InFailedSqlTransaction, /transaction is aborted/)
             @client.transaction_status.should be PG::PQTRANS_INERROR
             @client.instance_variable_get(:@client_tran_count).should eq 3
             flag = :was_here
@@ -431,10 +431,10 @@ describe PG::EM::Client do
           @client.instance_variable_get(:@client_tran_count).should eq 2
           expect {
             @client.query('SELECT CURRENT_TIMESTAMP')
-          }.to raise_error(ArgumentError, /transaction is aborted/)
+          }.to raise_error(PG::InFailedSqlTransaction, /transaction is aborted/)
           expect do
             @client.transaction { 'foo' }
-          end.to raise_error(PG::TransactionError, /error in transaction, need ROLLBACK/)
+          end.to raise_error(PG::InFailedSqlTransaction, /transaction is aborted/)
           @client.transaction_status.should be PG::PQTRANS_INERROR
           @client.instance_variable_get(:@client_tran_count).should eq 2
         end
@@ -442,10 +442,10 @@ describe PG::EM::Client do
         @client.instance_variable_get(:@client_tran_count).should eq 1
         expect {
           @client.query('SELECT CURRENT_TIMESTAMP')
-        }.to raise_error(ArgumentError, /transaction is aborted/)
+        }.to raise_error(PG::InFailedSqlTransaction, /transaction is aborted/)
         expect do
           @client.transaction { 'foo' }
-        end.to raise_error(PG::TransactionError, /error in transaction, need ROLLBACK/)
+        end.to raise_error(PG::InFailedSqlTransaction, /transaction is aborted/)
         @client.transaction_status.should be PG::PQTRANS_INERROR
         @client.instance_variable_get(:@client_tran_count).should eq 1
       end
@@ -463,17 +463,22 @@ describe PG::EM::Client do
     it "should detect premature transaction state change" do
       flag = false
       @client.transaction_status.should be PG::PQTRANS_IDLE
-      expect do
-        @client.transaction do |pg|
-          pg.should be @client
+      @client.instance_variable_get(:@client_tran_count).should eq 0
+      @client.transaction do |pg|
+        pg.should be @client
+        @client.transaction_status.should be PG::PQTRANS_INTRANS
+        @client.query('ROLLBACK')
+        @client.instance_variable_get(:@client_tran_count).should eq 1
+        @client.transaction_status.should be PG::PQTRANS_IDLE
+        @client.transaction do
           @client.transaction_status.should be PG::PQTRANS_INTRANS
           @client.instance_variable_get(:@client_tran_count).should eq 1
-          @client.query('ROLLBACK')
-          expect do
-            @client.transaction { 'foo' }
-          end.to raise_error(PG::TransactionError, /^unable to begin nested transaction, current transaction was finished prematurely$/)
-        end
-      end.to raise_error(PG::TransactionError, /^transaction was finished prematurely$/)
+          'foo'
+        end.should eq 'foo'
+        @client.transaction_status.should be PG::PQTRANS_IDLE
+        @client.instance_variable_get(:@client_tran_count).should eq 0
+      end
+      @client.instance_variable_get(:@client_tran_count).should eq 0
     end
   end
 

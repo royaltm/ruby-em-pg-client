@@ -1,7 +1,6 @@
 require 'fiber'
 require 'pg/em'
 module PG
-  class TransactionError < Error; end
   module EM
     # @!macro auto_synchrony_api
     #   Performs command asynchronously using {#async_$0}
@@ -310,14 +309,11 @@ module PG
         tcount = @client_tran_count.to_i
         case transaction_status
         when PG::PQTRANS_IDLE
-          if tcount.zero?
-            exec(TRAN_BEGIN_QUERY)
-          else
-            raise TransactionError.new('unable to begin nested transaction, current transaction was finished prematurely', self)
-          end
+          exec(TRAN_BEGIN_QUERY)
+          tcount = 0 if tcount != 0
         when PG::PQTRANS_INTRANS
         else
-          raise TransactionError.new('error in transaction, need ROLLBACK', self)
+          exec(TRAN_BEGIN_QUERY) # raises PG::InFailedSqlTransaction
         end
         @client_tran_count = tcount + 1
         begin
@@ -335,9 +331,9 @@ module PG
           when PG::PQTRANS_INERROR
             exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
           when PG::PQTRANS_IDLE
-            raise TransactionError.new('transaction was finished prematurely', self)
+            tcount = 0
           else
-            raise TransactionError.new('unkown transaction status', self)
+            exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
           end
           result
         ensure
