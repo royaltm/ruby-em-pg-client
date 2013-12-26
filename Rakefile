@@ -9,7 +9,6 @@ task :test => :'test:safe'
 
 namespace :test do
   env_common = {'PGDATABASE' => 'test'}
-  env_pg_013 = {'EM_PG_CLIENT_TEST_PG_VERSION' => '= 0.13.2'}
   env_unix_socket = env_common.merge('PGHOST' => '/tmp')
   env_tcpip = env_common.merge('PGHOST' => 'localhost')
 
@@ -25,14 +24,11 @@ namespace :test do
   desc "Run safe tests only"
   task :safe => [:warn, :spec] do
     %w[
-      spec/em_release_client.rb
-      spec/em_devel_client.rb
+      spec/em_client.rb
       spec/em_synchrony_client.rb
     ].each do |spec|
       sh env_unix_socket, "rspec #{spec}"
       sh env_tcpip, "rspec #{spec}"
-      sh env_pg_013.merge(env_unix_socket), "rspec #{spec}"
-      sh env_pg_013.merge(env_tcpip), "rspec #{spec}"
     end
   end
 
