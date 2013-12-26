@@ -115,8 +115,7 @@ module PG
     #     #   if EM reactor is running, otherwise acts exactly like its synchronous version.
     #     #
     #     #   @return [Client] reconnected client instance
-    #     #   @raise [ConnectionRefusedError] if there was a connection error
-    #     #   @raise [ConnectionTimeoutError] on timeout
+    #     #   @raise [PG::ConnectionBad] if there was a connection error
     #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
     #
     #     # @!method self.connect(*args, &blk)
@@ -124,8 +123,7 @@ module PG
     #     #   if EM reactor is running, otherwise acts exactly like its synchronous version.
     #     #
     #     #   @return [Client] new and connected client instance
-    #     #   @raise [ConnectionRefusedError] if there was a connection error
-    #     #   @raise [ConnectionTimeoutError] on timeout
+    #     #   @raise [PG::ConnectionBad] if there was a connection error
     #     #   @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
     #
     #     # @!scope class

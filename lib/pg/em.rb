@@ -352,9 +352,8 @@ module PG
       # +client_encoding+ *will* be set for you according to +Encoding.default_internal+.
       #
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
-      # @raise [ConnectionRefusedError] if there was an immediate connection error
+      # @raise [PG::ConnectionBad] if there was an immediate connection error
       #  (it may happen while using unix sockets)
-      # @raise [ConnectionTimeoutError] on timeout
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(args)
@@ -374,9 +373,8 @@ module PG
       # Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
       # If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
       #
-      # @raise [ConnectionRefusedError] if there was an immediate connection error
+      # @raise [PG::ConnectionBad] if there was an immediate connection error
       #  (it may happen while using unix sockets)
-      # @raise [ConnectionTimeoutError] on timeout
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
