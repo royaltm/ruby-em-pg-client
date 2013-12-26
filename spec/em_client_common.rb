@@ -207,7 +207,7 @@ shared_context 'em-pg common after' do
   end
 
   it_should_execute_with_error("raise syntax error in misspelled multiple statement",
-      described_class::QueryError,
+      PG::SyntaxError,
       "syntax error",
       :query, 'SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number')
 
@@ -226,7 +226,7 @@ shared_context 'em-pg common after' do
     @client.query_timeout.should eq 1.5
     start_time = Time.now
     pg_exec_and_check_with_error(@client, false,
-        described_class::QueryTimeoutError, "query timeout expired",
+        PG::ConnectionBad, "query timeout expired",
         :query, 'SELECT pg_sleep(2)') do
       (Time.now - start_time).should be < 2
       @client.async_command_aborted.should be_true
@@ -235,7 +235,7 @@ shared_context 'em-pg common after' do
       @client.query_timeout.should eq 0
       @client.async_autoreconnect = false
       pg_exec_and_check_with_error(@client, true,
-        described_class::QueryBadStateError, nil,
+        PG::ConnectionBad, "previous query expired",
         :query, 'SELECT 1') do
         @client.async_autoreconnect = true
       end
@@ -268,7 +268,7 @@ shared_context 'em-pg common after' do
     @client.query_timeout.should eq 1.1
     start_time = Time.now
     pg_exec_and_check_with_error(@client, true,
-        described_class::QueryTimeoutError, "query timeout expired",
+        PG::ConnectionBad, "query timeout expired",
         :query,
         'SELECT * from pg_class;' +
         'SELECT pg_sleep(1);' +

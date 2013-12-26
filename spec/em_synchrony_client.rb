@@ -166,7 +166,7 @@ describe PG::EM::Client do
   it "should raise syntax error in misspelled multiple statement" do
     expect {
       @client.query('SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number')
-    }.to raise_error(described_class::QueryError, /syntax error/)
+    }.to raise_error(PG::SyntaxError, /syntax error/)
   end
   
   it "should rollback transaction" do
@@ -189,7 +189,7 @@ describe PG::EM::Client do
     start_time = Time.now
     expect {
       @client.query('SELECT pg_sleep(2)')
-    }.to raise_error(described_class::QueryTimeoutError, /query timeout expired/)
+    }.to raise_error(PG::ConnectionBad, /query timeout expired/)
     (Time.now - start_time).should be < 2
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
@@ -198,7 +198,7 @@ describe PG::EM::Client do
     @client.async_autoreconnect = false
     expect {
       @client.query('SELECT 1')
-    }.to raise_error(described_class::QueryBadStateError)
+    }.to raise_error(PG::ConnectionBad, /previous query expired/)
     @client.async_autoreconnect = true
   end
 
@@ -235,7 +235,7 @@ describe PG::EM::Client do
           'SELECT * from pg_class;' + 
           'SELECT pg_sleep(2);' +
           'SELECT 42 number')
-    }.to raise_error(described_class::QueryTimeoutError, /query timeout expired/)
+    }.to raise_error(PG::ConnectionBad, /query timeout expired/)
     (Time.now - start_time).should be > 2
     @client.async_command_aborted.should be_true
     @client.status.should be PG::CONNECTION_BAD
@@ -412,17 +412,17 @@ describe PG::EM::Client do
             @client.instance_variable_get(:@client_tran_count).should eq 3
             expect {
               @client.query('SRELECT CURRENT_TIMESTAMP')
-            }.to raise_error(PG::EM::Errors::QueryError, /syntax error/)
+            }.to raise_error(PG::SyntaxError, /syntax error/)
             @client.transaction_status.should be PG::PQTRANS_INERROR
             @client.instance_variable_get(:@client_tran_count).should eq 3
             expect {
               @client.query('SELECT CURRENT_TIMESTAMP')
-            }.to raise_error(PG::EM::Errors::QueryError, /transaction is aborted/)
+            }.to raise_error(ArgumentError, /transaction is aborted/)
             @client.transaction_status.should be PG::PQTRANS_INERROR
             @client.instance_variable_get(:@client_tran_count).should eq 3
             expect do
               @client.transaction { 'foo' }
-            end.to raise_error(PG::EM::Errors::TransactionError, /error in transaction, need ROLLBACK/)
+            end.to raise_error(PG::TransactionError, /error in transaction, need ROLLBACK/)
             @client.transaction_status.should be PG::PQTRANS_INERROR
             @client.instance_variable_get(:@client_tran_count).should eq 3
             flag = :was_here
@@ -431,10 +431,10 @@ describe PG::EM::Client do
           @client.instance_variable_get(:@client_tran_count).should eq 2
           expect {
             @client.query('SELECT CURRENT_TIMESTAMP')
-          }.to raise_error(PG::EM::Errors::QueryError, /transaction is aborted/)
+          }.to raise_error(ArgumentError, /transaction is aborted/)
           expect do
             @client.transaction { 'foo' }
-          end.to raise_error(PG::EM::Errors::TransactionError, /error in transaction, need ROLLBACK/)
+          end.to raise_error(PG::TransactionError, /error in transaction, need ROLLBACK/)
           @client.transaction_status.should be PG::PQTRANS_INERROR
           @client.instance_variable_get(:@client_tran_count).should eq 2
         end
@@ -442,10 +442,10 @@ describe PG::EM::Client do
         @client.instance_variable_get(:@client_tran_count).should eq 1
         expect {
           @client.query('SELECT CURRENT_TIMESTAMP')
-        }.to raise_error(PG::EM::Errors::QueryError, /transaction is aborted/)
+        }.to raise_error(ArgumentError, /transaction is aborted/)
         expect do
           @client.transaction { 'foo' }
-        end.to raise_error(PG::EM::Errors::TransactionError, /error in transaction, need ROLLBACK/)
+        end.to raise_error(PG::TransactionError, /error in transaction, need ROLLBACK/)
         @client.transaction_status.should be PG::PQTRANS_INERROR
         @client.instance_variable_get(:@client_tran_count).should eq 1
       end
@@ -471,9 +471,9 @@ describe PG::EM::Client do
           @client.query('ROLLBACK')
           expect do
             @client.transaction { 'foo' }
-          end.to raise_error(PG::EM::Errors::TransactionError, /^unable to begin nested transaction, current transaction was finished prematurely$/)
+          end.to raise_error(PG::TransactionError, /^unable to begin nested transaction, current transaction was finished prematurely$/)
         end
-      end.to raise_error(PG::EM::Errors::TransactionError, /^transaction was finished prematurely$/)
+      end.to raise_error(PG::TransactionError, /^transaction was finished prematurely$/)
     end
   end
 

@@ -1,10 +1,8 @@
 require 'fiber'
 require 'pg/em'
 module PG
+  class TransactionError < Error; end
   module EM
-    module Errors
-      class TransactionError < QueryError; end
-    end
     # @!macro auto_synchrony_api
     #   Performs command asynchronously using {#async_$0}
     #   if EM reactor is running, otherwise acts exactly like PG::Connection#$0.
@@ -352,20 +350,19 @@ module PG
       def async_autoreconnect!(deferrable, error, &send_proc)
         if self.status != PG::CONNECTION_OK
           if async_autoreconnect
-            error = QueryError.wrap(error)
             reset_df = async_reset
-            reset_df.errback { |ex| deferrable.fail(ex) }
+            reset_df.errback { |ex| deferrable.fail ex }
             reset_df.callback do
               Fiber.new do
                 if on_autoreconnect
                   returned_df = on_autoreconnect.call(self, error)
                   if returned_df == false
-                    ::EM.next_tick { deferrable.fail(error) }
+                    ::EM.next_tick { deferrable.fail error }
                   elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
                     returned_df.callback { deferrable.protect(&send_proc) }
-                    returned_df.errback { |ex| deferrable.fail(ex) }
+                    returned_df.errback { |ex| deferrable.fail ex }
                   elsif returned_df.is_a?(Exception)
-                    ::EM.next_tick { deferrable.fail(returned_df) }
+                    ::EM.next_tick { deferrable.fail returned_df }
                   else
                     deferrable.protect(&send_proc)
                   end
@@ -375,10 +372,10 @@ module PG
               end.resume
             end
           else
-            ::EM.next_tick { deferrable.fail(QueryBadStateError.wrap(error)) }
+            ::EM.next_tick { deferrable.fail error }
           end
         else
-          ::EM.next_tick { deferrable.fail(QueryError.wrap(error)) }
+          ::EM.next_tick { deferrable.fail error }
         end
       end
     end

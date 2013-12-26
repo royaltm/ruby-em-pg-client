@@ -15,63 +15,8 @@ require 'pg/em-version'
 module PG
   module EM
 
-    module Errors
-      PGError = PG::Error
-      class Error < PGError
-        def initialize(message = nil, connection = nil, result = nil)
-          super message
-          @connection = connection
-          @result = result
-        end
-        class << self
-          def exception(error = nil)
-            err = super
-            err.instance_eval do
-              @connection = error.connection if error.respond_to?(:connection)
-              @result = error.result if error.respond_to?(:result)
-            end
-            err
-          end
-          def wrap(error)
-            if error.class == PGError
-              err = exception(error)
-              err.set_backtrace(error.backtrace)
-              err
-            else
-              error
-            end
-          end
-        end
-      end
-      # raised during query execution
-      class QueryError < Error; end
-      # raised during query execution when connection was in BAD state
-      # this is raised only when async_autoreconnect is disabled
-      class QueryBadStateError < QueryError; end
-      # raised while connecting (or resetting connection) asynchronously
-      class ConnectionError < Error; end
-      # raised when PG::PGRES_POLLING_FAILED received during poll
-      class ConnectionRefusedError < ConnectionError; end
-      # raised when invalid poll status received during poll
-      class UnexpectedStateError < ConnectionRefusedError; end
-      class BadConnectionStatusError < UnexpectedStateError; end
-      class BadPollStatusError < UnexpectedStateError; end
-      # TimeoutError module is included by timeout errors
-      # so one may only need to rescue TimeoutError
-      # to catch all timeout error types
-      module TimeoutError; end
-      # raised on query timeout
-      class QueryTimeoutError < QueryError
-        include TimeoutError
-      end
-      # raised on connect timeout
-      class ConnectionTimeoutError < ConnectionError
-        include TimeoutError
-      end
-    end
-
     class FeaturedDeferrable < ::EM::DefaultDeferrable
-      include Errors
+
       def initialize(&blk)
         if block_given?
           callback(&blk)
@@ -79,20 +24,20 @@ module PG
         end
       end
 
-      def protect(fail_value = nil, pg_error = QueryError)
+      def protect(fail_value = nil)
         yield
       rescue Exception => e
-        ::EM.next_tick { fail pg_error.wrap(e) }
+        ::EM.next_tick { fail e }
         fail_value
       end
 
-      def protect_and_succeed(fail_value = nil, pg_error = QueryError)
+      def protect_and_succeed(fail_value = nil)
         ret = yield
       rescue Exception => e
-        ::EM.next_tick { fail pg_error.wrap(e) }
+        ::EM.next_tick { fail e }
         fail_value
       else
-        ::EM.next_tick { succeed(ret) }
+        ::EM.next_tick { succeed ret }
         ret
       end
     end
@@ -157,8 +102,6 @@ module PG
     # If you are using a connection pool, make sure to acquire single connection first.
     #
     class Client < PG::Connection
-      include Errors
-
 
       # @!attribute connect_timeout
       #   @return [Float] connection timeout in seconds
@@ -225,7 +168,7 @@ module PG
       attr_accessor :async_command_aborted
 
       module Watcher
-        include Errors
+
         def initialize(client, deferrable, send_proc)
           @last_result = nil
           @client = client
@@ -245,7 +188,9 @@ module PG
               detach
               @client.async_command_aborted = true
               @deferrable.protect do
-                raise QueryTimeoutError.new("query timeout expired (async)", @client)
+                error = ConnectionBad.new("query timeout expired (async)")
+                error.instance_variable_set(:@connection, @client)
+                raise error
               end
             else
               setup_timer timeout, last_interval
@@ -259,7 +204,9 @@ module PG
           until @client.is_busy
             if (single_result = @client.get_result).nil?
               if (result = @last_result).nil?
-                raise QueryError.new(@client.error_message, @client)
+                error = ServerError.new(@client.error_message)
+                error.instance_variable_set(:@connection, @client)
+                raise error
               end
               result.check
               detach
@@ -272,7 +219,7 @@ module PG
         rescue Exception => e
           detach
           @timer.cancel if @timer
-          if e.is_a?(PGError)
+          if e.is_a?(PG::Error)
             @client.async_autoreconnect!(@deferrable, e, &@send_proc)
           else
             @deferrable.fail(e)
@@ -287,7 +234,7 @@ module PG
       end
 
       module ConnectWatcher
-        include Errors
+
         def initialize(client, deferrable, poll_method)
           @client = client
           @deferrable = deferrable
@@ -297,7 +244,9 @@ module PG
               begin
                 detach
                 @deferrable.protect do
-                  raise ConnectionTimeoutError.new("timeout expired (async)", @client)
+                  error = ConnectionBad.new("timeout expired (async)")
+                  error.instance_variable_set(:@connection, @client)
+                  raise error
                 end
               ensure
                 @client.finish unless reconnecting?
@@ -319,7 +268,8 @@ module PG
         end
 
         def poll_connection_and_check
-          error = case @client.__send__(@poll_method)
+          polling_ok = false
+          case @client.__send__(@poll_method)
           when PG::PGRES_POLLING_READING
             self.notify_readable = true
             self.notify_writable = false
@@ -329,29 +279,20 @@ module PG
             self.notify_readable = false
             return
           when PG::PGRES_POLLING_OK
-            case @client.status
-            when PG::CONNECTION_OK
-            when PG::CONNECTION_BAD
-              ConnectionRefusedError
-            else
-              BadConnectionStatusError
-            end
-          when PG::PGRES_POLLING_FAILED
-            ConnectionRefusedError
-          else
-            BadPollStatusError
+            polling_ok = true if @client.status == PG::CONNECTION_OK
           end
           @timer.cancel if @timer
           detach
-          @deferrable.protect_and_succeed(nil, ConnectionError) do
-            if error
+          @deferrable.protect_and_succeed do
+            unless polling_ok
               begin
-                raise error.new(@client.error_message, @client)
+                error = ConnectionBad.new(@client.error_message)
+                error.instance_variable_set(:@connection, @client)
+                raise error
               ensure
                 @client.finish unless reconnecting?
               end
             end
-            # mimic blocking connect behavior
             @client.set_default_encoding unless reconnecting?
             @client
           end
@@ -417,7 +358,7 @@ module PG
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
         async_args = parse_async_args(args)
-        conn = df.protect(nil, ConnectionRefusedError) { connect_start(*args) }
+        conn = df.protect { connect_start(*args) }
         if conn
           async_args.each {|k, v| conn.instance_variable_set(k, v) }
           ::EM.watch(conn.socket, ConnectWatcher, conn, df, :connect).poll_connection_and_check
@@ -439,7 +380,7 @@ module PG
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
-        ret = df.protect(:fail, ConnectionRefusedError) { reset_start }
+        ret = df.protect(:fail) { reset_start }
         unless ret == :fail
           ::EM.watch(self.socket, ConnectWatcher, self, df, :reset).poll_connection_and_check
         end
@@ -491,19 +432,18 @@ module PG
       def async_autoreconnect!(deferrable, error, &send_proc)
         if self.status != PG::CONNECTION_OK
           if async_autoreconnect
-            error = QueryError.wrap(error)
             reset_df = async_reset
-            reset_df.errback { |ex| deferrable.fail(ex) }
+            reset_df.errback { |ex| deferrable.fail ex }
             reset_df.callback do
               if on_autoreconnect
                 returned_df = on_autoreconnect.call(self, error)
                 if returned_df == false
-                  ::EM.next_tick { deferrable.fail(error) }
+                  ::EM.next_tick { deferrable.fail error }
                 elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
                   returned_df.callback { deferrable.protect(&send_proc) }
-                  returned_df.errback { |ex| deferrable.fail(ex) }
+                  returned_df.errback { |ex| deferrable.fail ex }
                 elsif returned_df.is_a?(Exception)
-                  ::EM.next_tick { deferrable.fail(returned_df) }
+                  ::EM.next_tick { deferrable.fail returned_df }
                 else
                   deferrable.protect(&send_proc)
                 end
@@ -512,10 +452,10 @@ module PG
               end
             end
           else
-            ::EM.next_tick { deferrable.fail(QueryBadStateError.wrap(error)) }
+            ::EM.next_tick { deferrable.fail error }
           end
         else
-          ::EM.next_tick { deferrable.fail(QueryError.wrap(error)) }
+          ::EM.next_tick { deferrable.fail error }
         end
       end
 
@@ -609,9 +549,13 @@ module PG
             ::EM.watch(self.socket, Watcher, self, df, send_proc).notify_readable = true
           end
           begin
-            raise QueryBadStateError.new("previous query expired, need connection reset", self) if @async_command_aborted
+            if @async_command_aborted
+              error = ConnectionBad.new("previous query expired, need connection reset")
+              error.instance_variable_set(:@connection, self)
+              raise error
+            end
             send_proc.call
-          rescue PGError => e
+          rescue PG::Error => e
             async_autoreconnect!(df, e, &send_proc)
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }
