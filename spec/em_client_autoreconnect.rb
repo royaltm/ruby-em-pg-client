@@ -3,8 +3,8 @@ require 'date'
 require 'eventmachine'
 require 'pg/em'
 
-$pgserver_cmd_stop = %Q[sudo su - postgres -c 'pg_ctl stop -m fast']
-$pgserver_cmd_start = %Q[sudo su - postgres -c 'pg_ctl -l $PGDATA/postgres.log start -w']
+$pgserver_cmd_stop = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" stop -s -m fast]
+$pgserver_cmd_start = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" start -s -w]
 
 shared_context 'pg-em common' do
   around(:each) do |testcase|
@@ -37,7 +37,7 @@ describe 'pg-em async connect fail' do
         EM.stop
       end
     end
-    error.should be_an_instance_of PG::EM::Errors::ConnectionRefusedError
+    error.should be_an_instance_of PG::ConnectionBad
   end
 end
 
@@ -65,7 +65,7 @@ describe 'pg-em default autoreconnect' do
   it "should not get database size using query after server shutdown" do
     system($pgserver_cmd_stop).should be_true
     @client.query('SELECT pg_database_size(current_database());') do |ex|
-      ex.should be_an_instance_of PG::EM::Errors::ConnectionRefusedError
+      ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
@@ -73,6 +73,18 @@ describe 'pg-em default autoreconnect' do
   it "should get database size using query after server startup" do
     system($pgserver_cmd_start).should be_true
     @tested_proc.call
+  end
+
+  it "should raise an error when in transaction after server restart" do
+    @client.query('BEGIN') do |result|
+      result.should be_an_instance_of PG::Result
+      system($pgserver_cmd_stop).should be_true
+      system($pgserver_cmd_start).should be_true
+      @client.query('SELECT pg_database_size(current_database());') do |ex|
+        ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+        @tested_proc.call
+      end.should be_a_kind_of ::EM::DefaultDeferrable
+    end
   end
 
   before(:all) do
@@ -110,6 +122,18 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     @tested_proc.call
   end
 
+  it "should raise an error when in transaction after server restart" do
+    @client.query('BEGIN') do |result|
+      result.should be_an_instance_of PG::Result
+      system($pgserver_cmd_stop).should be_true
+      system($pgserver_cmd_start).should be_true
+      @client.query('SELECT pg_database_size(current_database());') do |ex|
+        ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+        @tested_proc.call
+      end.should be_a_kind_of ::EM::DefaultDeferrable
+    end
+  end
+
   before(:all) do
     @tested_proc = proc do
       @client.exec_prepared('get_db_size') do |result|
@@ -141,7 +165,7 @@ describe 'pg-em with autoreconnect disabled' do
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     @client.query('SELECT pg_database_size(current_database());') do |ex|
-      ex.should be_an_instance_of PG::EM::Errors::QueryBadStateError
+      ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end

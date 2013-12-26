@@ -3,8 +3,8 @@ require 'date'
 require 'em-synchrony'
 require 'em-synchrony/pg'
 
-$pgserver_cmd_stop = %Q[sudo su - postgres -c 'pg_ctl stop -m fast']
-$pgserver_cmd_start = %Q[sudo su - postgres -c 'pg_ctl -l $PGDATA/postgres.log start -w']
+$pgserver_cmd_stop = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" stop -s -m fast]
+$pgserver_cmd_start = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" start -s -w]
 
 shared_context 'em-synchrony-pg common' do
   around(:each) do |testcase|
@@ -40,11 +40,22 @@ describe 'em-synchrony-pg default autoreconnect' do
     system($pgserver_cmd_stop).should be_true
     expect {
       @tested_proc.call
-    }.to raise_error(PG::EM::Errors::ConnectionRefusedError)
+    }.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
   end
 
   it "should get database size using query after server startup" do
     system($pgserver_cmd_start).should be_true
+    @tested_proc.call
+  end
+
+  it "should raise an error when in transaction after server restart" do
+    expect do
+      @client.transaction do
+        system($pgserver_cmd_stop).should be_true
+        system($pgserver_cmd_start).should be_true
+        @tested_proc.call
+      end
+    end.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
     @tested_proc.call
   end
 
@@ -78,6 +89,17 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
     @tested_proc.call
   end
 
+  it "should raise an error when in transaction after server restart" do
+    expect do
+      @client.transaction do
+        system($pgserver_cmd_stop).should be_true
+        system($pgserver_cmd_start).should be_true
+        @tested_proc.call
+      end
+    end.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
+    @tested_proc.call
+  end
+
   before(:all) do
     @tested_proc = proc do
       @client.exec_prepared('get_db_size') do |result|
@@ -107,7 +129,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     system($pgserver_cmd_start).should be_true
     expect {
       @tested_proc.call
-    }.to raise_error(PG::EM::Errors::QueryBadStateError)
+    }.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
   end
 
   it "should get database size using query after manual connection reset" do

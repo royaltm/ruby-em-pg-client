@@ -430,21 +430,36 @@ module PG
       def async_autoreconnect!(deferrable, error, &send_proc)
         if self.status != PG::CONNECTION_OK
           if async_autoreconnect
+            was_in_transaction = case @last_transaction_status
+            when PG::PQTRANS_IDLE, PG::PQTRANS_UNKNOWN
+              false
+            else
+              true
+            end
             reset_df = async_reset
             reset_df.errback { |ex| deferrable.fail ex }
             reset_df.callback do
               if on_autoreconnect
                 returned_df = on_autoreconnect.call(self, error)
-                if returned_df == false
-                  ::EM.next_tick { deferrable.fail error }
-                elsif returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
-                  returned_df.callback { deferrable.protect(&send_proc) }
+                if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                  returned_df.callback do
+                    if was_in_transaction
+                      deferrable.fail error
+                    else
+                      deferrable.protect(&send_proc)
+                    end
+                  end
                   returned_df.errback { |ex| deferrable.fail ex }
                 elsif returned_df.is_a?(Exception)
                   ::EM.next_tick { deferrable.fail returned_df }
+                elsif returned_df == false || (was_in_transaction && returned_df != true)
+                  ::EM.next_tick { deferrable.fail error }
                 else
                   deferrable.protect(&send_proc)
                 end
+              elsif was_in_transaction
+                # after re-connecting transaction is lost anyway
+                ::EM.next_tick { deferrable.fail error }
               else
                 deferrable.protect(&send_proc)
               end
@@ -552,6 +567,7 @@ module PG
               error.instance_variable_set(:@connection, self)
               raise error
             end
+            @last_transaction_status = transaction_status
             send_proc.call
           rescue PG::Error => e
             async_autoreconnect!(df, e, &send_proc)
