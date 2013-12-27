@@ -318,39 +318,42 @@ module PG
 
       end
 
+      @@connect_timeout_envvar = conndefaults.find{|d| d[:keyword] == "connect_timeout" }[:envvar]
+
       # @!visibility private
       def self.parse_async_args(args)
         async_args = {
           :@async_autoreconnect => nil,
-          :@connect_timeout => 0,
+          :@connect_timeout => nil,
           :@query_timeout => 0,
           :@on_autoreconnect => nil,
           :@async_command_aborted => false,
         }
         if args.last.is_a? Hash
           args[-1] = args.last.reject do |key, value|
-            case key.to_s
-            when 'async_autoreconnect'
-              async_args[:@async_autoreconnect] = !!value
+            case key.to_sym
+            when :async_autoreconnect
+              async_args[:@async_autoreconnect] = value
               true
-            when 'on_reconnect'
-              raise ArgumentError.new("on_reconnect is no longer supported, use on_autoreconnect")
-            when 'on_autoreconnect'
+            when :on_reconnect
+              raise ArgumentError, "on_reconnect is no longer supported, use on_autoreconnect"
+            when :on_autoreconnect
               if value.respond_to? :call
                 async_args[:@on_autoreconnect] = value
                 async_args[:@async_autoreconnect] = true if async_args[:@async_autoreconnect].nil?
               end
               true
-            when 'connect_timeout'
+            when :connect_timeout
               async_args[:@connect_timeout] = value.to_f
               false
-            when 'query_timeout'
+            when :query_timeout
               async_args[:@query_timeout] = value.to_f
               true
             end
           end
         end
-        async_args[:@async_autoreconnect] = false if async_args[:@async_autoreconnect].nil?
+        async_args[:@async_autoreconnect] = !!async_args[:@async_autoreconnect]
+        async_args[:@connect_timeout] ||= ENV[@@connect_timeout_envvar].to_f
         async_args
       end
 

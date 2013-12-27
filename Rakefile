@@ -19,6 +19,7 @@ namespace :test do
   desc "Run specs only"
   task :spec do
     sh "rspec spec/pg_em_featured_deferrable.rb"
+    sh "rspec spec/pg_em_client_connect_timeout.rb"
   end
 
   desc "Run safe tests only"
