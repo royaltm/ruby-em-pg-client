@@ -292,4 +292,23 @@ shared_context 'em-pg common after' do
       @client.status.should be PG::CONNECTION_OK
     end
   end
+
+  it "should not expire after executing erraneous query" do
+    @client.query_timeout.should eq 0
+    @client.query_timeout = 0.1
+    @client.query_timeout.should eq 0.1
+    start_time = Time.now
+    pg_exec_and_check_with_error(@client, false,
+        PG::SyntaxError, "syntax error",
+        :query, 'SELLECT 1') do
+      @client.async_command_aborted.should be_false
+      ::EM.add_timer(0.11) do
+        @client.async_command_aborted.should be_false
+        @client.status.should be PG::CONNECTION_OK
+        @client.query_timeout = 0
+        @client.query_timeout.should eq 0
+        EM.stop
+      end
+    end
+  end
 end

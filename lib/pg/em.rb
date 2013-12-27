@@ -169,23 +169,35 @@ module PG
 
       module Watcher
 
-        def initialize(client, deferrable, send_proc)
-          @last_result = nil
+        def initialize(client)
           @client = client
+          @is_connected = true
+        end
+
+        def watching?
+          @is_connected
+        end
+
+        def watch_query(deferrable, send_proc)
+          self.notify_readable = true
+          @last_result = nil
           @deferrable = deferrable
           @send_proc = send_proc
-          if (timeout = client.query_timeout) > 0
+          @timer.cancel if @timer
+          if (timeout = @client.query_timeout) > 0
             @notify_timestamp = Time.now
             setup_timer timeout
           else
             @timer = nil
           end
+          self
         end
 
         def setup_timer(timeout, adjustment = 0)
           @timer = ::EM::Timer.new(timeout - adjustment) do
             if (last_interval = Time.now - @notify_timestamp) >= timeout
-              detach
+              @timer = nil
+              self.notify_readable = false
               @client.async_command_aborted = true
               @deferrable.protect do
                 error = ConnectionBad.new("query timeout expired (async)")
@@ -198,27 +210,33 @@ module PG
           end
         end
 
+        def cancel_timer
+          if @timer
+            @timer.cancel
+            @timer = nil
+          end
+        end
+
         def notify_readable
           result = false
           @client.consume_input
           until @client.is_busy
             if (single_result = @client.get_result).nil?
               if (result = @last_result).nil?
-                error = ServerError.new(@client.error_message)
+                error = Error.new(@client.error_message)
                 error.instance_variable_set(:@connection, @client)
                 raise error
               end
               result.check
-              detach
-              @timer.cancel if @timer
+              cancel_timer
               break
             end
             @last_result.clear if @last_result
             @last_result = single_result
           end
         rescue Exception => e
-          detach
-          @timer.cancel if @timer
+          self.notify_readable = false
+          cancel_timer
           if e.is_a?(PG::Error)
             @client.async_autoreconnect!(@deferrable, e, &@send_proc)
           else
@@ -228,17 +246,23 @@ module PG
           if result == false
             @notify_timestamp = Time.now if @timer
           else
+            self.notify_readable = false
             @deferrable.succeed(result) 
           end
+        end
+
+        def unbind
+          @is_connected = false
         end
       end
 
       module ConnectWatcher
 
-        def initialize(client, deferrable, poll_method)
+        def initialize(client, deferrable, is_reset)
           @client = client
           @deferrable = deferrable
-          @poll_method = :"#{poll_method}_poll"
+          @is_reset = is_reset
+          @poll_method = is_reset ? :reset_poll : :connect_poll
           if (timeout = client.connect_timeout) > 0
             @timer = ::EM::Timer.new(timeout) do
               begin
@@ -256,19 +280,10 @@ module PG
         end
 
         def reconnecting?
-          @poll_method == :reset_poll
-        end
-
-        def notify_writable
-          poll_connection_and_check
-        end
-
-        def notify_readable
-          poll_connection_and_check
+          @is_reset
         end
 
         def poll_connection_and_check
-          polling_ok = false
           case @client.__send__(@poll_method)
           when PG::PGRES_POLLING_READING
             self.notify_readable = true
@@ -297,6 +312,10 @@ module PG
             @client
           end
         end
+
+        alias_method :notify_writable, :poll_connection_and_check
+        alias_method :notify_readable, :poll_connection_and_check
+
       end
 
       # @!visibility private
@@ -360,7 +379,8 @@ module PG
         conn = df.protect { connect_start(*args) }
         if conn
           async_args.each {|k, v| conn.instance_variable_set(k, v) }
-          ::EM.watch(conn.socket, ConnectWatcher, conn, df, :connect).poll_connection_and_check
+          ::EM.watch(conn.socket_io, ConnectWatcher, conn, df, false).
+            poll_connection_and_check
         end
         df
       end
@@ -378,12 +398,33 @@ module PG
       def async_reset(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
+        # there can be only one watch handler over the socket
+        # apparently eventmachine has hard time dealing with more than one
+        # for blocking reset this is not needed
+        if @watcher
+          @watcher.detach if @watcher.watching?
+          @watcher = nil
+        end
         ret = df.protect(:fail) { reset_start }
         unless ret == :fail
-          ::EM.watch(self.socket, ConnectWatcher, self, df, :reset).poll_connection_and_check
+          ::EM.watch(self.socket_io, ConnectWatcher, self, df, true).
+            poll_connection_and_check
         end
         df
       end
+
+      # Closes the backend connection.
+      #
+      # Detaches watch handler to prevent memory leak.
+      def finish
+        super
+        if @watcher
+          @watcher.detach if @watcher.watching?
+          @watcher = nil
+        end
+      end
+
+      alias_method :close, :finish
 
       # @!endgroup
       # @!group Synchronous connection methods
@@ -559,7 +600,12 @@ module PG
           df = PG::EM::FeaturedDeferrable.new(&blk)
           send_proc = proc do
             super(*args)
-            ::EM.watch(self.socket, Watcher, self, df, send_proc).notify_readable = true
+            if @watcher && @watcher.watching?
+              @watcher.watch_query(df, send_proc)
+            else
+              @watcher = ::EM.watch(self.socket_io, Watcher, self).
+                            watch_query(df, send_proc)
+            end
           end
           begin
             if @async_command_aborted
