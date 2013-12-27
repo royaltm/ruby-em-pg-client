@@ -321,8 +321,8 @@ module PG
       @@connect_timeout_envvar = conndefaults.find{|d| d[:keyword] == "connect_timeout" }[:envvar]
 
       # @!visibility private
-      def self.parse_async_args(args)
-        async_args = {
+      def self.parse_async_options(args)
+        options = {
           :@async_autoreconnect => nil,
           :@connect_timeout => nil,
           :@query_timeout => 0,
@@ -333,28 +333,30 @@ module PG
           args[-1] = args.last.reject do |key, value|
             case key.to_sym
             when :async_autoreconnect
-              async_args[:@async_autoreconnect] = value
+              options[:@async_autoreconnect] = value
               true
             when :on_reconnect
               raise ArgumentError, "on_reconnect is no longer supported, use on_autoreconnect"
             when :on_autoreconnect
               if value.respond_to? :call
-                async_args[:@on_autoreconnect] = value
-                async_args[:@async_autoreconnect] = true if async_args[:@async_autoreconnect].nil?
+                options[:@on_autoreconnect] = value
+                options[:@async_autoreconnect] = true if options[:@async_autoreconnect].nil?
+              else
+                raise ArgumentError, "on_autoreconnect must respond to `call'"
               end
               true
             when :connect_timeout
-              async_args[:@connect_timeout] = value.to_f
+              options[:@connect_timeout] = value.to_f
               false
             when :query_timeout
-              async_args[:@query_timeout] = value.to_f
+              options[:@query_timeout] = value.to_f
               true
             end
           end
         end
-        async_args[:@async_autoreconnect] = !!async_args[:@async_autoreconnect]
-        async_args[:@connect_timeout] ||= ENV[@@connect_timeout_envvar].to_f
-        async_args
+        options[:@async_autoreconnect] = !!options[:@async_autoreconnect]
+        options[:@connect_timeout] ||= ENV[@@connect_timeout_envvar].to_f
+        options
       end
 
       # @!group Asynchronous connection methods
@@ -378,7 +380,7 @@ module PG
       #  (it may happen while using unix sockets)
       def self.async_connect(*args, &blk)
         df = PG::EM::FeaturedDeferrable.new(&blk)
-        async_args = parse_async_args(args)
+        async_args = parse_async_options(args)
         conn = df.protect { connect_start(*args) }
         if conn
           async_args.each {|k, v| conn.instance_variable_set(k, v) }
@@ -449,7 +451,7 @@ module PG
       # +Encoding.default_internal+.
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
       def initialize(*args)
-        Client.parse_async_args(args).each {|k, v| self.instance_variable_set(k, v) }
+        Client.parse_async_options(args).each {|k, v| instance_variable_set(k, v) }
         super(*args)
       end
 
