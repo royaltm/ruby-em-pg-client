@@ -258,7 +258,7 @@ shared_context 'em-pg common after' do
     ensure_em_stop do
       @client.async_command_aborted.should be_true
       @client.status.should be PG::CONNECTION_BAD
-      @client.reset(:blocking)
+      @client.reset
       @client.async_command_aborted.should be_false
       @client.status.should be PG::CONNECTION_OK
     end

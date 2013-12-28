@@ -97,6 +97,8 @@ module PG
     #
     class Client < PG::Connection
 
+      ROOT_FIBER = Fiber.current
+
       # @!attribute connect_timeout
       #   @return [Float] connection timeout in seconds
       #   Connection timeout.
@@ -276,7 +278,7 @@ module PG
       # Attempts to reset the connection.
       #
       # Performs command asynchronously yielding current fiber
-      # if EventMachine reactor is running and +force_blocking+ isn't +true+.
+      # if EventMachine reactor is running and current fiber isn't the root fiber.
       # Ensures that other fibers can process while waiting for the server
       # to complete the request.
       #
@@ -285,25 +287,23 @@ module PG
       # @raise [PG::Error]
       #
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
-      def reset(force_blocking = false)
+      def reset
         @async_command_aborted = false
-        if ::EM.reactor_running? && !force_blocking
-          f = Fiber.current
+        if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
           reset_defer {|r| f.resume(r) }
 
-          result = Fiber.yield
-
-          raise result if result.is_a?(::Exception)
-          result
+          conn = Fiber.yield
+          raise conn if conn.is_a?(::Exception)
+          conn
         else
-          super()
+          super
         end
       end
 
       # Creates new instance of PG::EM::Client and attempts to establish connection.
       #
       # Performs command asynchronously yielding current fiber
-      # if EventMachine reactor is running.
+      # if EventMachine reactor is running and current fiber isn't the root fiber.
       # Ensures that other fibers can process while waiting for the server
       # to complete the request.
       #
@@ -317,12 +317,10 @@ module PG
       # +client_encoding+ *will* be set for you according to +Encoding.default_internal+.
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
       def self.new(*args, &blk)
-        if ::EM.reactor_running?
-          f = Fiber.current
+        if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
           connect_defer(*args) {|r| f.resume(r) }
 
           conn = Fiber.yield
-
           raise conn if conn.is_a?(::Exception)
           if block_given?
             begin
@@ -538,7 +536,7 @@ module PG
 
       # @!macro auto_synchrony_api
       #   Performs command asynchronously yielding current fiber
-      #   if EventMachine reactor is running.
+      #   if EventMachine reactor is running and current fiber isn't the root fiber.
       #   Ensures that other fibers can process while waiting for the server
       #   to complete the request.
       #
@@ -610,8 +608,7 @@ module PG
 
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
-            if ::EM.reactor_running?
-              f = Fiber.current
+            if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
               #{defer_name}(*args) do |res|
                 f.resume(res)
               end
