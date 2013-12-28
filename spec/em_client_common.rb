@@ -40,11 +40,11 @@ module PGSpecMacros
     end
 
     def it_should_rollback
-      it_should_execute("rollback transaction", :query, 'ROLLBACK')
+      it_should_execute("rollback transaction", :query_defer, 'ROLLBACK')
     end
 
     def it_should_begin
-      it_should_execute("begin transaction", :query, 'BEGIN TRANSACTION')
+      it_should_execute("begin transaction", :query_defer, 'BEGIN TRANSACTION')
     end
   end
 end
@@ -97,20 +97,20 @@ shared_context 'em-pg common before' do
   it_should_begin
 
   it_should_execute("drop table `foo` if exists",
-      :query, 'DROP TABLE IF EXISTS foo')
+      :query_defer, 'DROP TABLE IF EXISTS foo')
 
   it_should_execute("create simple table `foo`",
-      :query, 'CREATE TABLE foo (id integer,cdate timestamp with time zone,data varchar)')
+      :query_defer, 'CREATE TABLE foo (id integer,cdate timestamp with time zone,data varchar)')
 
 end
 
 shared_context 'em-pg common after' do
 
   it_should_execute("create prepared statement",
-      :prepare, 'get_foo', 'SELECT * FROM foo order by id')
+      :prepare_defer, 'get_foo', 'SELECT * FROM foo order by id')
 
   it "should describe prepared statement" do
-    pg_exec_and_check(@client, :describe_prepared, 'get_foo') do |result|
+    pg_exec_and_check(@client, :describe_prepared_defer, 'get_foo') do |result|
       result.nfields.should eq 3
       result.fname(0).should eq 'id'      
       result.values.should be_empty
@@ -118,7 +118,7 @@ shared_context 'em-pg common after' do
   end
 
   it "should read foo table with prepared statement" do
-    pg_exec_and_check(@client, :exec_prepared, 'get_foo') do |result|
+    pg_exec_and_check(@client, :exec_prepared_defer, 'get_foo') do |result|
       result.each_with_index do |row, i|
         row['id'].to_i.should == i
         DateTime.parse(row['cdate']).should == @cdates[i]
@@ -128,10 +128,10 @@ shared_context 'em-pg common after' do
   end
 
   it_should_execute("declare cursor",
-    :query, 'DECLARE foobar SCROLL CURSOR FOR SELECT * FROM foo')
+    :query_defer, 'DECLARE foobar SCROLL CURSOR FOR SELECT * FROM foo')
 
   it "should fetch two rows from table" do
-    pg_exec_and_check(@client, :query, 'FETCH FORWARD 2 FROM foobar') do |result|
+    pg_exec_and_check(@client, :query_defer, 'FETCH FORWARD 2 FROM foobar') do |result|
       result.nfields.should eq 3
       result.fname(0).should eq 'id'      
       result.values.length.should eq 2
@@ -139,25 +139,25 @@ shared_context 'em-pg common after' do
   end
   
   it "should describe cursor with describe_portal" do
-    pg_exec_and_check(@client, :describe_portal, 'foobar') do |result|
+    pg_exec_and_check(@client, :describe_portal_defer, 'foobar') do |result|
       result.nfields.should eq 3
       result.fname(0).should eq 'id'
     end
   end
 
-  it_should_execute("close cursor", :query, 'CLOSE foobar')
+  it_should_execute("close cursor", :query_defer, 'CLOSE foobar')
 
   it "should connect to database asynchronously" do
     this = :first
     Encoding.default_internal = Encoding::ISO_8859_1
-    described_class.async_connect do |conn|
+    described_class.connect_defer do |conn|
       this = :second
       Encoding.default_internal = nil
       conn.should be_an_instance_of described_class
       conn.external_encoding.should_not eq(conn.internal_encoding)
       conn.internal_encoding.should be Encoding::ISO_8859_1
       conn.get_client_encoding.should eq "LATIN1"
-      pg_exec_and_check(conn, :query, 'SELECT pg_database_size(current_database());') do |result|
+      pg_exec_and_check(conn, :query_defer, 'SELECT pg_database_size(current_database());') do |result|
         result[0]['pg_database_size'].to_i.should be > 0
       end
     end.should be_a_kind_of ::EM::DefaultDeferrable
@@ -167,7 +167,7 @@ shared_context 'em-pg common after' do
   it "should connect without setting incompatible encoding" do
     this = :first
     Encoding.default_internal = Encoding::Emacs_Mule
-    described_class.async_connect do |conn|
+    described_class.connect_defer do |conn|
       this = :second
       Encoding.default_internal = nil
       conn.should be_an_instance_of described_class
@@ -180,12 +180,12 @@ shared_context 'em-pg common after' do
   it_should_execute_with_error("raise syntax error in misspelled multiple statement",
       PG::SyntaxError,
       "syntax error",
-      :query, 'SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number')
+      :query_defer, 'SELECT * from pg_class; SRELECT CURRENT_TIMESTAMP; SELECT 42 number')
 
   it_should_rollback
 
   it "should return only last statement" do
-    pg_exec_and_check(@client, :query,
+    pg_exec_and_check(@client, :query_defer,
       'SELECT * from pg_class; SELECT CURRENT_TIMESTAMP; SELECT 42 number') do |result|
       result[0]['number'].should eq "42"
     end
@@ -198,7 +198,7 @@ shared_context 'em-pg common after' do
     start_time = Time.now
     pg_exec_and_check_with_error(@client, false,
         PG::ConnectionBad, "query timeout expired",
-        :query, 'SELECT pg_sleep(2)') do
+        :query_defer, 'SELECT pg_sleep(2)') do
       (Time.now - start_time).should be < 2
       @client.async_command_aborted.should be_true
       @client.status.should be PG::CONNECTION_BAD
@@ -207,7 +207,7 @@ shared_context 'em-pg common after' do
       @client.async_autoreconnect = false
       pg_exec_and_check_with_error(@client, true,
         PG::ConnectionBad, "previous query expired",
-        :query, 'SELECT 1') do
+        :query_defer, 'SELECT 1') do
         @client.async_autoreconnect = true
       end
     end
@@ -218,7 +218,7 @@ shared_context 'em-pg common after' do
     @client.query_timeout = 1.1
     @client.query_timeout.should eq 1.1
     start_time = Time.now
-    pg_exec_and_check(@client, :query,
+    pg_exec_and_check(@client, :query_defer,
         'SELECT * from pg_class;' +
         'SELECT pg_sleep(1);' +
         'SELECT * from pg_class;' + 
@@ -240,7 +240,7 @@ shared_context 'em-pg common after' do
     start_time = Time.now
     pg_exec_and_check_with_error(@client, true,
         PG::ConnectionBad, "query timeout expired",
-        :query,
+        :query_defer,
         'SELECT * from pg_class;' +
         'SELECT pg_sleep(1);' +
         'SELECT * from pg_class;' + 
@@ -258,7 +258,7 @@ shared_context 'em-pg common after' do
     ensure_em_stop do
       @client.async_command_aborted.should be_true
       @client.status.should be PG::CONNECTION_BAD
-      @client.reset
+      @client.reset(:blocking)
       @client.async_command_aborted.should be_false
       @client.status.should be PG::CONNECTION_OK
     end
@@ -271,7 +271,7 @@ shared_context 'em-pg common after' do
     start_time = Time.now
     pg_exec_and_check_with_error(@client, false,
         PG::SyntaxError, "syntax error",
-        :query, 'SELLECT 1') do
+        :query_defer, 'SELLECT 1') do
       @client.async_command_aborted.should be_false
       ::EM.add_timer(0.11) do
         @client.async_command_aborted.should be_false

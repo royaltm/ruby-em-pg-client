@@ -15,7 +15,8 @@ describe PG::EM::Client do
 
   it "should populate foo with some data " do
     EM::Iterator.new(@values).map(proc{ |(data, id), iter|
-      @client.query('INSERT INTO foo (id,cdate,data) VALUES($1,$2,$3) returning cdate', [id, DateTime.now, data]) do |result|
+      @client.query_defer('INSERT INTO foo (id,cdate,data) VALUES($1,$2,$3) returning cdate',
+                                           [id, DateTime.now, data]) do |result|
       result.should be_an_instance_of PG::Result
         iter.return(DateTime.parse(result[0]['cdate']))
       end.should be_a_kind_of ::EM::DefaultDeferrable

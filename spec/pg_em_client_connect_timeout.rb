@@ -7,7 +7,7 @@ shared_context 'test async connect timeout' do
   it "should timeout expire while connecting" do
     this = :first
     start = Time.now
-    subject.async_connect(options) do |ex|
+    subject.connect_defer(options) do |ex|
       this = :second
       ex.should be_an_instance_of PG::ConnectionBad
       ex.message.should include 'timeout expired (async)'

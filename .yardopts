@@ -1,1 +1,1 @@
-lib/em-synchrony/*.rb lib/pg/*.rb lib/pg/em/*.rb - BENCHMARKS.md LICENCE
+lib/pg/em/client/*.rb  lib/pg/em/*.rb lib/pg/*.rb - BENCHMARKS.md LICENCE

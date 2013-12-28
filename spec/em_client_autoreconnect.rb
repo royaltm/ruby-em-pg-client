@@ -64,7 +64,7 @@ describe 'pg-em default autoreconnect' do
 
   it "should not get database size using query after server shutdown" do
     system($pgserver_cmd_stop).should be_true
-    @client.query('SELECT pg_database_size(current_database());') do |ex|
+    @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
       ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
@@ -76,11 +76,11 @@ describe 'pg-em default autoreconnect' do
   end
 
   it "should raise an error when in transaction after server restart" do
-    @client.query('BEGIN') do |result|
+    @client.query_defer('BEGIN') do |result|
       result.should be_an_instance_of PG::Result
       system($pgserver_cmd_stop).should be_true
       system($pgserver_cmd_start).should be_true
-      @client.query('SELECT pg_database_size(current_database());') do |ex|
+      @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
         ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
         @tested_proc.call
       end.should be_a_kind_of ::EM::DefaultDeferrable
@@ -89,7 +89,7 @@ describe 'pg-em default autoreconnect' do
 
   before(:all) do
     @tested_proc = proc do
-      @client.query('SELECT pg_database_size(current_database());') do |result|
+      @client.query_defer('SELECT pg_database_size(current_database());') do |result|
         result.should be_an_instance_of PG::Result
         result[0]['pg_database_size'].to_i.should be > 0
         EM.stop
@@ -123,11 +123,11 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
   end
 
   it "should raise an error when in transaction after server restart" do
-    @client.query('BEGIN') do |result|
+    @client.query_defer('BEGIN') do |result|
       result.should be_an_instance_of PG::Result
       system($pgserver_cmd_stop).should be_true
       system($pgserver_cmd_start).should be_true
-      @client.query('SELECT pg_database_size(current_database());') do |ex|
+      @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
         ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
         @tested_proc.call
       end.should be_a_kind_of ::EM::DefaultDeferrable
@@ -136,14 +136,14 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
 
   before(:all) do
     @tested_proc = proc do
-      @client.exec_prepared('get_db_size') do |result|
+      @client.exec_prepared_defer('get_db_size') do |result|
         result.should be_an_instance_of PG::Result
         result[0]['pg_database_size'].to_i.should be > 0
         EM.stop
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
     @on_autoreconnect = proc do |client, ex|
-      df = client.prepare('get_db_size', 'SELECT pg_database_size(current_database());')
+      df = client.prepare_defer('get_db_size', 'SELECT pg_database_size(current_database());')
       df.should be_a_kind_of ::EM::DefaultDeferrable
       df
     end
@@ -164,7 +164,7 @@ describe 'pg-em with autoreconnect disabled' do
   it "should not get database size using query after server restart" do
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
-    @client.query('SELECT pg_database_size(current_database());') do |ex|
+    @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
       ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
@@ -181,7 +181,7 @@ describe 'pg-em with autoreconnect disabled' do
 
   before(:all) do
     @tested_proc = proc do
-      @client.query('SELECT pg_database_size(current_database());') do |result|
+      @client.query_defer('SELECT pg_database_size(current_database());') do |result|
         result.should be_an_instance_of PG::Result
         result[0]['pg_database_size'].to_i.should be > 0
         EM.stop
