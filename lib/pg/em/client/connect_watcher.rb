@@ -16,15 +16,11 @@ module PG
           @poll_method = is_reset ? :reset_poll : :connect_poll
           if (timeout = client.connect_timeout) > 0
             @timer = ::EM::Timer.new(timeout) do
-              begin
-                detach
-                @deferrable.protect do
-                  error = ConnectionBad.new("timeout expired (async)")
-                  error.instance_variable_set(:@connection, @client)
-                  raise error
-                end
-              ensure
-                @client.finish unless reconnecting?
+              detach
+              @deferrable.protect do
+                error = ConnectionBad.new("timeout expired (async)")
+                error.instance_variable_set(:@connection, @client)
+                raise error
               end
             end
           end
@@ -51,13 +47,9 @@ module PG
           detach
           @deferrable.protect_and_succeed do
             unless polling_ok
-              begin
-                error = ConnectionBad.new(@client.error_message)
-                error.instance_variable_set(:@connection, @client)
-                raise error
-              ensure
-                @client.finish unless reconnecting?
-              end
+              error = ConnectionBad.new(@client.error_message)
+              error.instance_variable_set(:@connection, @client)
+              raise error
             end
             @client.set_default_encoding unless reconnecting?
             @client

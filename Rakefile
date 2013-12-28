@@ -20,6 +20,7 @@ namespace :test do
   task :spec do
     sh "rspec spec/pg_em_featured_deferrable.rb"
     sh "rspec spec/pg_em_client_options.rb"
+    sh "rspec spec/pg_em_client_connect_finish.rb"
     sh "rspec spec/pg_em_client_connect_timeout.rb"
   end
 
