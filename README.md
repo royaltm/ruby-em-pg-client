@@ -1,38 +1,71 @@
 em-pg-client
 ============
 
-Author: Rafał Michalski  (mailto:rafal@yeondir.com)
+Author: Rafał Michalski  (rafal at yeondir dot com)
 
 * http://github.com/royaltm/ruby-em-pg-client
 
-DESCRIPTION
+Description
 -----------
 
-__em-pg-client__ is the Ruby and EventMachine driver interface to the PostgreSQL
-RDBMS. It is based on [ruby-pg](https://bitbucket.org/ged/ruby-pg).
+__em-pg-client__ is the Ruby and EventMachine driver interface to the
+PostgreSQL RDBMS. It is based on [ruby-pg](https://bitbucket.org/ged/ruby-pg).
 
-FEATURES
+Features
 --------
 
-* Non-blocking / asynchronous processing with EventMachine,
-* fully async auto re-connects on connection losses (e.g.: RDBMS restarts),
+* Non-blocking / fully asynchronous processing with EventMachine,
+* event reactor auto-detecting, asynchronous fiber-entangling command methods
+  (the same code can be used regardless of the EventMachine reactor state)
+* additional asynchronous deferrable command methods,
+* fully asynchronous automatic re-connects on connection losses
+  (e.g.: RDBMS restarts, network failures),
 * minimal changes to [PG::Connection](http://deveiate.org/code/pg/PG/Connection.html) API,
 * configurable timeouts (connect or execute) of asynchronous processing,
-* additional Fiber-aware version supporting [EM-Synchrony](https://github.com/igrigorik/em-synchrony).
-* *new*: [Sequel Adapter](https://github.com/fl00r/em-pg-sequel) by Peter Yanovich
+* dedicated connection pool with dynamic size, supporing all asynchronous
+  client methods and transactions,
+* [Sequel Adapter](https://github.com/fl00r/em-pg-sequel) by Peter Yanovich,
+* works on windows (requires ruby 2.0) (issue #7)
 
-BUGS/LIMITATIONS
+Bugs/Limitations
 ----------------
 
 * no async support for: COPY commands (`get_copy_data`,  `put_copy_data`),
   `wait_for_notify` and `transaction`
 * actually no ActiveRecord support (you are welcome to contribute).
-* doesn't work on Windows (issue #7)
 
 API Changes between versions
 ----------------------------
 
+### 0.2.x -> 0.3.x
+
+There is a substantial API interface change between this and the previous
+version releases. The idea was to make this implementation as much compatible
+as possible with the `pg` interface.
+E.g. the `#async_exec` is now an alias to `#exec`.
+
+The other reason was to get rid of the ugly em / em-synchrony duality.
+
+* There is no separate em-synchrony client version anymore.
+* The methods returning Deferrable ha`ve now the `*_defer` suffix.
+* The `#async_exec` and `#async_query` (in <= 0.2 they were deferrable methods)
+  are now aliases to `#exec`.
+* The `pg` command methods `#exec`, `#query`, `#exec_*`, `#describe_*` now behave
+  the same as in `em-synchrony/pg` <= 0.2 client.
+* The following methods were removed:
+
+  - `#async_prepare`,
+  - `#async_exec_prepared`,
+  - `#async_describe_prepared`,
+  - `#async_describe_portal`
+
+  as their names were confusing due to the unfortunate `#async_exec`.
+
+* The `async_connect` and `#async_reset` are renamed to `connect_defer` and `#reset_defer`
+  respectively and are now deprecated aliases.
+
 ### 0.1.x -> 0.2.x
+
 * `on_reconnect` renamed to more accurate `on_autoreconnect`
   (well, it's not used by PG::EM::Client#reset call).
 * `async_autoreconnect` is `false` by default if `on_autoreconnect`
@@ -41,23 +74,24 @@ API Changes between versions
 TODO:
 -----
 
+* implement streaming results (Postgres >= 9.2) in some way
 * implement EM adapted version of `get_copy_data`, `put_copy_data`,
   `wait_for_notify` and `transaction`
-* add some fd/socket hackery to get it working on Windows (issue #7)
-* em-synchrony ORM (ActiveRecord and maybe Datamapper) support
-  as separate projects
+* ORM (ActiveRecord and maybe Datamapper) support as separate projects
 * present more benchmarks
 
-REQUIREMENTS
+Requirements
 ------------
 
-* ruby >= 1.9 (tested: 1.9.3-p194, 1.9.2-p320, 1.9.1-p378)
-* https://bitbucket.org/ged/ruby-pg >= 0.13.2 (>= 0.14 recommended)
+* ruby >= 1.9 (tested: 1.9.3-p374, 1.9.2-p320, 1.9.1-p378, 2.0.0-p353, 2.1.0)
+* https://bitbucket.org/ged/ruby-pg >= 0.17.0
 * [PostgreSQL](http://www.postgresql.org/ftp/source/) RDBMS >= 8.3
-* http://rubyeventmachine.com >= 0.12.10
-* (optional) [EM-Synchrony](https://github.com/igrigorik/em-synchrony)
+* http://rubyeventmachine.com >= 1.0.0
+*  [EM-Synchrony](https://github.com/igrigorik/em-synchrony)
+  (optional - not needed for any of the client functionality,
+  just wrap your code in a fiber)
 
-INSTALL
+Install
 -------
 
 ```
@@ -67,10 +101,7 @@ INSTALL
 #### Gemfile
 
 ```ruby
-  # eventmachine
-  gem "em-pg-client", "~> 0.2.1", :require => 'pg/em'
-  # em-synchrony
-  gem "em-pg-client", "~> 0.2.1", :require => ['pg/em', 'em-synchrony/pg']
+  gem "em-pg-client", "~> 0.3.0"
 ```
 
 #### Github
@@ -79,7 +110,7 @@ INSTALL
   git clone git://github.com/royaltm/ruby-em-pg-client.git
 ```
 
-WHY?
+Why?
 ----
 
 Because I didn't find any ruby-pg's EM implementation to fit my needs.
@@ -99,7 +130,7 @@ all of them have similiar flaws:
 * poor error handling,
 * not fully supporting asynchronous PG::Connection API.
 
-The last one is worth some comment:
+The last one is worth a comment:
 
 They all use blocking methods to retrieve whole result from server
 ([PGConn#block](http://deveiate.org/code/pg/PG/Connection.html#method-i-block) or
@@ -113,37 +144,54 @@ Depending on the size of queries results and the level of concurrency, the gain 
 responsiveness of your application might be actually quite huge. I've done some
 {file:BENCHMARKS.md BENCHMARKING} already.
 
-THANKS
+Thanks
 ------
 
 The greetz go to:
-* [Authors](https://bitbucket.org/ged/ruby-pg/wiki/Home#!copying) of __pg__ driver (especially for its async-api)
-* Francis Cianfrocca for great reactor framework [EventMachine](https://github.com/eventmachine/eventmachine)
-* Ilya Grigorik [igrigorik](https://github.com/igrigorik) for [untangling](http://www.igvita.com/2010/03/22/untangling-evented-code-with-ruby-fibers/) EM with Fibers
 
-USAGE
+* [Authors](https://bitbucket.org/ged/ruby-pg/wiki/Home#!copying) of __pg__
+  driver (especially for its async-api)
+* Francis Cianfrocca for great reactor framework
+  [EventMachine](https://github.com/eventmachine/eventmachine)
+* Ilya Grigorik [igrigorik](https://github.com/igrigorik) for
+  [untangling EM with Fibers](http://www.igvita.com/2010/03/22/untangling-evented-code-with-ruby-fibers/)
+* Peter Yanovich [fl00r](https://github.com/fl00r) for the
+  [em-pg-sequel](https://github.com/fl00r/em-pg-sequel)
+* Andrew Rudenko [prepor](https://github.com/prepor) for the implicit idea
+  of the re-usable watcher from his [em-pg](https://github.com/prepor/em-pg).
+
+Usage
 -----
-__em-pg-client__ provides PG::EM::Client class which inherits
+__em-pg-client__ provides {PG::EM::Client} class which inherits
 [PG::Connection](http://deveiate.org/code/pg/PG/Connection.html).
-You can work with PG::EM::Client almost the same way you would with
+You can work with {PG::EM::Client} almost the same way you would with
 PG::Connection.
 
 The real difference begins when you turn EventMachine reactor on.
 
-### BASIC
-
 ```ruby
   require 'pg/em'
   
-  # no async
   pg = PG::EM::Client.new dbname: 'test'
+
+  # no async
   pg.query('select * from foo') do |result|
     puts Array(result).inspect
   end
 
   # asynchronous
   EM.run do
-    df = pg.query('select * from foo')
+    Fiber.new do
+      pg.query('select * from foo') do |result|
+        puts Array(result).inspect
+      end
+      EM.stop
+    end.resume
+  end
+
+  # asynchronous + deferrable
+  EM.run do
+    df = pg.query_defer('select * from foo')
     df.callback { |result|
       puts Array(result).inspect
       EM.stop
@@ -153,107 +201,126 @@ The real difference begins when you turn EventMachine reactor on.
     }
     puts "sent"
   end
-
-  # alternatively
-  EM.run do
-    pg.query('select * from foo') do |result|
-      raise result if result.is_a? ::Exception
-      puts Array(result).inspect
-      EM.stop
-    end
-    puts "sent"
-  end
 ```
 
 ### PG::Connection methods adapted to EventMachine
 
 The list of PG::EM::Client async methods for processing with EventMachine.
 
-#### 1. Async methods (always returning `Deferrable` object):
+#### Asynchronous, returning `EM::Deferrable` methods:
 
-* `Client.async_connect` (singleton method)
-* `async_reset`
-* `async_exec` (alias: `async_query`)
-* `async_prepare`
-* `async_exec_prepared`
-* `async_describe_prepared`
-* `async_describe_portal`
+* `Client.connect_defer` (singleton method)
+* `reset_defer`
+* `exec_defer` (alias: `query_defer`)
+* `prepare_defer`
+* `exec_prepared_defer`
+* `describe_prepared_defer`
+* `describe_portal_defer`
 
-For arguments of theese methods consult their original blocking (without `async_` prefix)
+For arguments of theese methods consult their original blocking (without `_defer` suffix)
 counterparts in [PG::Connection](http://deveiate.org/code/pg/PG/Connection.html) manual.
 
 Use `callback` on the returned `Deferrable` to receive result. 
 The result you receive is PG::EM::Client for PG::EM::Client.async_connect
-and `async_reset`, and [PG::Result](http://deveiate.org/code/pg/PG/Result.html) for the rest
-of the methods. The received PG::EM::Client is in a connected state and ready for queries.
-You need to `clear` obtained PG::Result object yourself or leave it to `gc`.
+and `async_reset`, and the [PG::Result](http://deveiate.org/code/pg/PG/Result.html)
+for the rest of the methods. The received PG::EM::Client is in a connected state
+and ready for queries. You need to `clear` obtained PG::Result object yourself
+or leave it to `gc`.
 
 To detect a failure in an executed method use `errback` on returned `Deferrable`.
 You should expect an instance of `Exception` (usually PG::Error) as `errback`
 argument. You may check its `backtrace` to find origin of the error.
 
-#### 2. Async / blocking methods (returning `Deferrable` only when EM is running):
+#### Reactor sensing, asynchronous but synchronized to fiber methods:
 
-* `exec` (alias: `query`)
+The list of PG::EM::Client fiber aware methods for processing with
+EM-Synchrony / EventMachine.
+
+* `Client.new` (singleton, alias: `connect`, `open`, `setdb`, `setdblogin`)
+* `reset`
+* `exec` (alias: `query`, `async_exec`, `async_query`)
 * `prepare`
 * `exec_prepared`
 * `describe_prepared`
 * `describe_portal`
 
-Outside EventMachine's event loop these methods are regular, blocking PG::Connection
-methods.
+Under the hood, the above methods call `*_defer` counterparts of themselves
+and `yield` from the current fiber awaiting for the result. The PG::Result
+(or PG::EM::Client for `connect` and `reset`) is then returned to the caller.
+If the code block was given, it is called with the result as its argument.
+In that case the value of the block is returned instead and PG::Result is
+cleared (or in case of `connect` or `reset` PG::EM::Client is being closed)
+after executing block.
 
-All the methods (1 & 2) accept block argument which they attach to `callback` and `errback`
-hooks of returned `Deferrable`.
+These methods detect if EventMachine is running and if the current fiber is
+not a root fiber the parent (blocking) PG::Connection methods are called
+instead.
 
-You may also mix async and blocking methods without closing the connection.
-You only need to start/stop EventMachine in between async calls.
+Like in pure EventMachine version you can mix asynchronous, fiber aware and
+blocking methods without finishing the connection. You only need to
+start/stop EventMachine in between asynchronous calls.
+
+Although [em-synchrony](https://github.com/igrigorik/em-synchrony/) provides
+very nice set of tools for untangled EventMachine, you don't really require
+it to fully benefit from the PG::EM::Client. Just wrap your asynchronous
+code in a fiber:
+
+    Fiber.new { ... }.resume
 
 #### Special options
 
-There are 3 additional connection options and 1 standard `pg` option used by
+There are 3 additional connection options and one standard `pg` option used by
 async methods. You may add them as one of the __hash__ options to
-PG::EM::Client.new or PG::EM::Client.async_connect or simply use accessor
+{PG::EM::Client.new} or {PG::EM::Client.async_connect} or simply use accessor
 methods to change them on the fly. The additional options are not passed to
-`ibpq`.
+`libpq`.
 
 The options are:
 
-* `async_autoreconnect` (`true` / `false` with default `false` unless
-  `on_autoreconnect` is specified)
-  allows automatic re-connection when there was a problem with connection
-  to the server,
-* `on_autoreconnect` (`nil` / `Proc` with default `nil`)
-  a hook which is called after auto-reconnecting,
-* `query_timeout` (`Float` / `Fixnum` with default `0`)
-  allows to set timeout for query execution,
-* `connect_timeout` (`Float` / `Fixnum` with default `0`)
-  connection establishing and resetting timeout.
+* `async_autoreconnect`
+* `on_autoreconnect`
+* `query_timeout`
+* `connect_timeout`
 
 Only `connect_timeout` is a standard `libpq` option, although changing it by
 accessor method only affects asynchronous functions.
+See {PG::EM::Client} for the details.
 
-### AUTORECONNECTING IN ASYNC MODE
+#### Handling errors
 
-Autoreconnecting is done in non-blocking manner using `async_reset` internally.
+Exactly like in `pg`:
+
+```ruby
+  EM.synchrony do
+    begin
+      pg.query('sellect * from foo')
+    rescue PG::SyntaxError => e
+      puts "PSQL error: #{e.inspect}"
+    end
+    EM.stop
+  end
+```
+
+### Auto re-connecting in asynchronous mode
+
+Connection reset is done in a non-blocking manner using `reset_defer` internally.
 
 ```ruby
   EM.run do
-    pg = PG::EM::Client.new dbname: 'test',
-          connect_timeout: 5, query_timeout: 50,
-          async_autoreconnect: true
-    try_query = lambda do |&blk|
-      pg.query('select * from foo') do |result|
-        raise result if result.is_a? ::Exception
-        puts Array(result).inspect
-        blk.call
+    Fiber.new do
+      pg = PG::EM::Client.new dbname: 'test',
+            async_autoreconnect: true
+      try_query = lambda do
+        pg.query('select * from foo') do |result|
+          puts Array(result).inspect
+        end
       end
-    end
-    try_query.call {
+      try_query.call
       system 'pg_ctl stop -m fast'
       system 'pg_ctl start -w'
-      try_query.call { EM.stop }
-    }
+      try_query.call
+      EM.stop
+    end.resume
   end
 ```
 
@@ -263,161 +330,67 @@ to enable this feature call:
   pg.async_autoreconnect = true
 ```
 
-or
-
-```ruby
-  pg = PG::EM::Client.new dbname: 'test',
-    async_autoreconnect: true
-```
-
 It's also possible to define `on_autoreconnect` callback to be invoked
 while the connection has been reset. It's called just before the send query
 command is executed:
 
 ```ruby
   EM.run do
-    pg = PG::EM::Client.new dbname: 'test',
-          async_autoreconnect: true
-    pg.prepare('bar', 'select * from foo order by cdate desc') do
-      pg.on_autoreconnect = proc { |c, e|
+    Fiber.new do
+      pg = PG::EM::Client.new dbname: 'test',
+            async_autoreconnect: true
+      pg.on_autoreconnect = proc do |c, e|
         c.prepare('bar', 'select * from foo order by cdate desc')
-      }
-      try_query = lambda do |&blk|
+      end
+      pg.on_autoreconnect.call pg
+
+      try_query = lambda do
         pg.exec_prepared('bar') do |result|
-          raise result if result.is_a? ::Exception
           puts Array(result).inspect
-          blk.call
         end
       end
-      try_query.call {
-        system 'pg_ctl stop -m fast'
-        system 'pg_ctl start -w'
-        try_query.call { EM.stop }
-      }
-    end
+      try_query.call
+      system 'pg_ctl stop -m fast'
+      system 'pg_ctl start -w'
+      try_query.call
+      EM.stop
+    end.resume
   end
 ```
 
-As you can see it's possible to send async query from inside `on_autoreconnect`
-proc. However you have to pass `Deferrable` from the async callback to the
-caller. See PG::EM::Client#on_autoreconnect docs for details.
+It's possible to send queries from inside of the `on_autoreconnect` as in
+the above example. See {PG::EM::Client#on_autoreconnect} docs for details.
 
-### TRUE ASYNC
+### {PG::EM::ConnectionPool}
 
-For non-blocking connect use PG::EM::Client.async_connect and
-PG::EM::Client#async_reset for asynchronous re-connect. Like other async
-methods they return `Deferrable` object.
-Use Deferrable's #callback to obtain already connected PG::EM::Client.
+Forever alone? Not anymore! There is a dedicated connection pool class which
+can asynchronously create new connections on concurrent usage and automatically
+drop the failed ones.
 
-```ruby
-  EM.run do
-    pool = (1..10).map {
-      PG::EM::Client.async_connect dbname: 'test',
-          connect_timeout: 5, query_timeout: 50 }
-
-    togo = pool.length
-
-    pool.each_with_index do |df, i|
-      df.callback do |pg|
-        pg.query("select * from foo") do |result|
-          puts "recv: #{i}"
-          EM.stop if (togo-=1).zero?
-        end
-        puts "sent: #{i}"
-      end
-      df.errback { |ex| raise ex }
-    end
-  end
-```
-
-### Fibers / EM-Synchrony
-
-There is a special version of PG::EM::Client library with fiber aware methods
-for EM-Synchrony or other implementations of Fiber untangled EventMachine.
-
-The `require` string is "em-synchrony/pg" instead of "pg/em".
-
-`em-synchrony/pg` version of PG::EM::Client.new is fully asynchronous and
-blocks only current fiber. This also applies to PG::EM::Client#reset.
-
-```ruby
-  require 'em-synchrony'
-  require 'em-synchrony/pg'
-
-  EM.synchrony do
-    pg = PG::EM::Client.new dbname: 'test'
-    pg.query('select * from foo') do |result|
-      puts Array(result).inspect
-    end
-    EM.stop
-  end
-```
-
-Although [em-synchrony](https://github.com/igrigorik/em-synchrony/) provides
-very nice set of tools for untangled EventMachine, you don't really require
-it to fully benefit from this version of PG::EM::Client.
-
-#### PG::Connection methods adapted to EM-Synchrony
-
-The list of PG::EM::Client fiber aware methods for processing with
-EM-Synchrony / EventMachine.
-
-All `async_*` methods are exactly the same as in pure EventMachine version
-of PG::EM::Client.
-
-The fiber aware methods are:
-
-* `Client.connect` (singleton, alias: `new`, `open`, `setdb`, `setdblogin`)
-* `reset`
-* `exec` (alias: `query`)
-* `prepare`
-* `exec_prepared`
-* `describe_prepared`
-* `describe_portal`
-
-Under the hood, these methods call async counterparts of themselves and `yield` from current
-fiber awaiting for the result. The PG::Result (or PG::EM::Client for `connect`
-and `reset`) is then returned to the caller. If code block was given, it is
-executed with result as the argument. In that case the value of the block is
-returned instead and PG::Result is cleared (or in case of `connect` or `reset`
-PG::EM::Client is being closed) after executing block. From single fiber point
-of view, they behave like regular blocking PG::Connection methods.
-
-Each of them is also automatic, detecting if EventMachine is running.
-If called outside EM event loop they are exactly the original methods of
-PG::Connection.
-
-Like in pure EventMachine version you can mix async, fiber aware and
-blocking methods without finishing the connection. You only need to
-start/stop EventMachine in between async calls.
-
-#### Handling errors
-
-```ruby
-  EM.synchrony do
-    begin
-      pg.query('select * from foo') do |result|
-        puts result
-      end
-    rescue PG::Error => e
-      puts "PSQL error: #{e.inspect}"
-    end
-    EM.stop
-  end
-```
+It also provides a #transaction method which locks the in-transaction
+connection to the calling fiber and allows to execute commands
+on the same connection within a transaction block.
+The transactions may be nested thanks to the enhancend
+{PG::EM::Client#transaction} method.
 
 #### Parallel async queries
 
 ```ruby
+  require 'pg/em/connection_pool'
+  require 'em-synchrony'
+
   EM.synchrony do
-    pg = EM::Synchrony::ConnectionPool.new(size: 2) do
-      PG::EM::Client.new :dbname => 'test'
-    end
-    multi = EventMachine::Synchrony::Multi.new
-    multi.add :foo, pg.aquery('select * from foo') # or #async_query()
-    multi.add :bar, pg.aquery('select * from bar') # #aquery() is just an alias
+    pg = PG::EM::ConnectionPool.new(size: 2, dbname: 'test')
+
+    multi = EM::Synchrony::Multi.new
+    multi.add :foo, pg.query_defer('select pg_sleep(1)')
+    multi.add :bar, pg.query_defer('select pg_sleep(1)')
+
+    start = Time.now
     res = multi.perform
-    p res
+    # around 1 sec.
+    puts Time.now - start
+
     EM.stop
   end
 ```
@@ -425,49 +398,25 @@ start/stop EventMachine in between async calls.
 #### Fiber Concurrency
 
 ```ruby
+  require 'pg/em/connection_pool'
+  require 'em-synchrony'
+  require "em-synchrony/fiber_iterator"
+
   EM.synchrony do
-    # use ConnectionPool when more Fibers will be querying at the same time!
-    pg = EM::Synchrony::ConnectionPool.new(size: 5) do
-      PG::EM::Client.new :dbname => 'test'
-    end
-    counter = 0
-    EM::Synchrony::FiberIterator.new(['select * from foo']*10, 5) do |query|
-      i = counter
+    concurrency = 5
+    queries = (1..10).map {|i| "select pg_sleep(1); select #{i}" }
+
+    pg = PG::EM::ConnectionPool.new(size: concurrency, dbname: 'test')
+
+    start = Time.now
+    EM::Synchrony::FiberIterator.new(queries, concurrency).each do |query|
       pg.query(query) do |result|
-        puts "recv: #{i}"
+        puts "recv: #{result.getvalue(0,0)}"
       end
-      puts "sent: #{i}"
-      counter += 1
     end
+    # around 2 secs.
+    puts Time.now - start
+
     EM.stop
   end
 ```
-
-#### Async reconnect with on_autoreconnect callback
-
-```ruby
-  EM.synchrony do
-    on_autoreconnect = proc do |c, e|
-      c.prepare('bar', 'select * from foo order by cdate desc')
-    end
-    pg = EM::Synchrony::ConnectionPool.new(size: 5) do
-      p = PG::EM::Client.new dbname: 'test', on_autoreconnect: on_autoreconnect
-      on_autoreconnect.call p
-      p
-    end
-    try_query = lambda do
-      pg.exec_prepared('bar') do |result|
-        raise result if result.is_a? ::Exception
-        puts Array(result).inspect
-      end
-    end
-    try_query.call
-    system 'pg_ctl stop -m fast'
-    system 'pg_ctl start -w'
-    try_query.call
-    EM.stop
-  end
-```
-
-Specifying `on_autoreconnect` as PG::EM::Client.new initialization option,
-implicitly enables `async_autoreconnect`.

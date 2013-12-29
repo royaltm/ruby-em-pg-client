@@ -16,7 +16,7 @@ module PG
     #
     # The list of {Client} command methods that are available in {ConnectionPool}:
     #
-    # 1. Blocking command methods:
+    # Blocking command methods:
     #
     # * {Client#exec}
     # * {Client#query}
@@ -28,7 +28,7 @@ module PG
     # * {Client#describe_prepared}
     # * {Client#describe_portal}
     #
-    # 2. Deferrable command methods:
+    # Deferrable command methods:
     #
     # * {Client#exec_defer}
     # * {Client#query_defer}
