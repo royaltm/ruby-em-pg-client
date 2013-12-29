@@ -1,5 +1,5 @@
 $:.unshift "lib"
-gem 'eventmachine', '>= 1.0.0.beta.1'
+gem 'eventmachine', '~> 1.0.0'
 gem 'pg', ENV['EM_PG_CLIENT_TEST_PG_VERSION']
 require 'date'
 require 'eventmachine'
