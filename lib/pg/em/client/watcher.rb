@@ -5,8 +5,7 @@ module PG
       # This module is used as a handler to ::EM.watch connection socket and
       # extract query results in a non-blocking manner.
       #
-      # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
-      # Licence:: MIT License
+      # Author:: Rafal Michalski
       module Watcher
 
         def initialize(client)

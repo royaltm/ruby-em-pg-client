@@ -21,9 +21,7 @@ module PG
 
     # == PostgreSQL EventMachine client
     #
-    # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
-    # Licence:: MIT License
-    #
+    # Author:: Rafal Michalski
     #
     # {PG::EM::Client} is a PG::Connection[http://deveiate.org/code/pg/PG/Connection.html]
     # wrapper designed for EventMachine[http://rubyeventmachine.com/].
@@ -211,7 +209,7 @@ module PG
       # Attempts to establish the connection asynchronously.
       #
       # @return [FeaturedDeferrable]
-      # @yieldparam pg [Client|PG::Error] new and connected client instance on success or an {Error}
+      # @yieldparam pg [Client|PG::Error] new and connected client instance on success or an PG::Error
       #
       # Use the returned deferrable's hooks +callback+ to obtain newly created and already connected {Client} object.
       # In case of connection error +errback+ hook is called instead with a raised error object as its argument.
@@ -244,7 +242,7 @@ module PG
       # Attempts to reset the connection asynchronously.
       #
       # @return [FeaturedDeferrable]
-      # @yieldparam pg [Client|PG::Error] reconnected client instance on success or an {Error}
+      # @yieldparam pg [Client|PG::Error] reconnected client instance on success or an PG::Error
       #
       # Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
       # If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
@@ -435,7 +433,7 @@ module PG
       #   Sends SQL query request specified by +sql+ to PostgreSQL for asynchronous processing,
       #   and immediately returns with +deferrable+.
       #
-      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @yieldparam result [PG::Result|Error] command result on success or an PG::Error
       #   @return [FeaturedDeferrable]
       #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
       #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
@@ -447,7 +445,7 @@ module PG
       #   Prepares statement +sql+ with name +stmt_name+ to be executed later asynchronously,
       #   and immediately returns with deferrable.
       #
-      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @yieldparam result [PG::Result|Error] command result on success or an PG::Error
       #   @return [FeaturedDeferrable]
       #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
       #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
@@ -458,7 +456,7 @@ module PG
       #   Execute prepared named statement specified by +statement_name+ asynchronously,
       #   and immediately returns with deferrable.
       #
-      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @yieldparam result [PG::Result|Error] command result on success or an PG::Error
       #   @return [FeaturedDeferrable]
       #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
       #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
@@ -470,7 +468,7 @@ module PG
       #   Asynchronously sends command to retrieve information about the prepared statement +statement_name+,
       #   and immediately returns with deferrable.
       #
-      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @yieldparam result [PG::Result|Error] command result on success or an PG::Error
       #   @return [FeaturedDeferrable]
       #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
       #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.
@@ -481,7 +479,7 @@ module PG
       #   Asynchronously sends command to retrieve information about the portal +portal_name+,
       #   and immediately returns with deferrable.
       #
-      #   @yieldparam result [PG::Result|Error] command result on success or an {Error}
+      #   @yieldparam result [PG::Result|Error] command result on success or an PG::Error
       #   @return [FeaturedDeferrable]
       #   Use the returned deferrable's hooks +callback+ and +errback+ to obtain result.
       #   If the block is provided it's bound to +callback+ and +errback+ hooks of the returned deferrable.

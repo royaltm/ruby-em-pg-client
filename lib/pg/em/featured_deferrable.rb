@@ -3,8 +3,7 @@ module PG
 
     # Deferrable with error protectors
     #
-    # Author:: Rafal Michalski (mailto:royaltm75@gmail.com)
-    # Licence:: MIT License
+    # Author:: Rafal Michalski
     class FeaturedDeferrable < ::EM::DefaultDeferrable
 
       def initialize(&blk)
