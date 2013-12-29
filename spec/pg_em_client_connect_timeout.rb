@@ -49,7 +49,7 @@ end
 
 describe 'connect timeout expire' do
   subject          { PG::EM::Client }
-  let(:black_hole) { '127.0.0.0' }
+  let(:black_hole) { '192.168.255.254' }
   let(:timeout)    { 1 }
   let(:envvar)     { 'PGCONNECT_TIMEOUT' }
 
