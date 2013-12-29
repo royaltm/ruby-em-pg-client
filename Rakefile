@@ -22,6 +22,7 @@ namespace :test do
     sh "rspec spec/pg_em_client_options.rb"
     sh "rspec spec/pg_em_client_connect_finish.rb"
     sh "rspec spec/pg_em_client_connect_timeout.rb"
+    sh "rspec spec/pg_em_connection_pool.rb"
   end
 
   desc "Run safe tests only"

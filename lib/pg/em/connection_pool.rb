@@ -1,92 +1,147 @@
-require 'em-synchrony/pg'
+require 'pg/em'
 
 module PG
   module EM
-    # This class is to be used only with synchrony version of {PG::EM::Client}
-    # required by
-    #   require 'em-synchrony/pg'
+
+    # Connection pool for PG::EM::Client
     #
-    # To create a connection pool you need to pass +db_options+ hash
-    # to the ConnectionPool.new:
+    # Author:: Rafal Michalski
+    #
+    # The ConnectionPool allocates new connections asynchronously when
+    # there are no available connections left up to the {#max_size} number.
     #
     # @example Basic usage
     #   pg = PG::EM::ConnectionPool.new size: 10, dbname: 'foo'
     #   res = pg.query 'select * from bar'
     #
-    # All of the below {Client} instance methods are available on {ConnectionPool} instance:
+    # The list of {Client} command methods that are available in {ConnectionPool}:
     #
-    # * {SynchronyClient#exec}
-    # * {SynchronyClient#exec_params}
-    # * {SynchronyClient#exec_prepared}
-    # * {SynchronyClient#prepare}
-    # * {SynchronyClient#describe_prepared}
-    # * {SynchronyClient#describe_portal}
-    # * {SynchronyClient#async_exec}
-    # * {SynchronyClient#async_exec_params}
-    # * {SynchronyClient#async_exec_prepared}
-    # * {SynchronyClient#async_prepare}
-    # * {SynchronyClient#async_describe_prepared}
-    # * {SynchronyClient#async_describe_portal}
-    # * {Client#send_query}
-    # * {Client#send_query_prepared}
-    # * {Client#send_prepare}
-    # * {Client#send_describe_prepared}
-    # * {Client#send_describe_portal}
+    # 1. Blocking command methods:
     #
+    # * {Client#exec}
+    # * {Client#query}
+    # * {Client#async_exec}
+    # * {Client#async_query}
+    # * {Client#exec_params}
+    # * {Client#exec_prepared}
+    # * {Client#prepare}
+    # * {Client#describe_prepared}
+    # * {Client#describe_portal}
+    #
+    # 2. Deferrable command methods:
+    #
+    # * {Client#exec_defer}
+    # * {Client#query_defer}
+    # * {Client#async_exec_defer}
+    # * {Client#async_query_defer}
+    # * {Client#exec_params_defer}
+    # * {Client#exec_prepared_defer}
+    # * {Client#prepare_defer}
+    # * {Client#describe_prepared_defer}
+    # * {Client#describe_portal_defer}
+    #
+    # If {Client#async_autoreconnect} option is not set or the re-connect fails
+    # the failed connection is dropped from the pool.
     class ConnectionPool
-      include Errors
-      # Creates and initializes new connection pool
+
+      DEFAULT_SIZE = 4
+
+      # Maximum number of connections in the connection pool
+      attr_reader :max_size
+
+      attr_reader :available, :allocated
+
+      # Creates and initializes new connection pool.
       #
-      # Pass PG::EM::Client +options+ and optional Client factory code as +blk+
+      # The connection pool allocates its first connection upon initialization
+      # unless +lazy: true+ option is given.
       #
-      # There are two custom ConnectionPool +options+:
+      # Pass PG::EM::Client +options+ together with ConnectionPool +options+:
       #
-      # - +:size+ or +:pool_size+ = +1+ - the number of Client connections
-      # - +:disconnect_class+ = +QueryBadStateError+ - error class
-      #   when raised during query execution will trigger
-      #   re-creation of the Client connection;
-      #   set to nil to disable this feature
+      # - +:size+ = +4+ - the maximum number of Client connections
+      # - +:lazy+ = false - should lazy allocate first connection
+      # - +:connection_class+ = {PG::EM::Client}
       #
-      # When +:async_autoreconnect+ option is true the +QueryBadStateError+ is never raised,
-      # so the +:disconnect_class+ option only affects cases when you turn off +async_autoreconnect+
-      # and want to have more control over server disconnects.
-      #
-      # If you don't specify Client factory block the default Client factory
-      # will add +:async_autoreconnect+ = +true+ to the +options+.
-      #
-      # @raise [Error]
+      # @raise [PG::Error]
       # @raise [ArgumentError]
-      def initialize(opts = {}, &blk)
+      def initialize(options = {})
         @available = []
         @pending = []
-        @reserved = {}
-        @acquire_cb = blk
-        @disconnect_error_class = QueryBadStateError
+        @allocated = {}
+        @connection_class = Client
 
-        size = 1
-        opts = opts.reject do |key, value|
+        lazy = false
+        @options = options.reject do |key, value|
           case key.to_sym
-          when :size, :pool_size
-            size = value.to_i
+          when :size, :max_size
+            @max_size = value.to_i
             true
-          when :disconnect_class
-            @disconnect_error_class = value
+          when :connection_class
+            @connection_class = value
+            true
+          when :lazy
+            lazy = value
             true
           end
         end
 
-        raise ArgumentError, "#{self.class}.new: pool size must be > 1" if size < 1
-        
-        @acquire_cb = proc { Client.new(opts.merge(async_autoreconnect: true)) } unless block_given?
+        @max_size ||= DEFAULT_SIZE
 
-        size.times do
-          @available << @acquire_cb.call
+        raise ArgumentError, "#{self.class}.new: pool size must be > 1" if @max_size < 1
+
+        # allocate first connection, unless we are lazy
+        execute unless lazy
+      end
+
+      # Creates and initializes new connection pool.
+      #
+      # Attempts to establish the first connection asynchronously.
+      #
+      # @return [FeaturedDeferrable]
+      # @yieldparam pg [Client|PG::Error] new and connected client instance
+      #             on success or a PG::Error
+      #
+      # Use the returned deferrable's hooks +callback+ to obtain newly created
+      # {ConnectionPool}.
+      # In case of a connection error +errback+ hook is called instead with
+      # a raised error object as its argument.
+      #
+      # If the block is provided it's bound to both +callback+ and +errback+
+      # hooks of the returned deferrable.
+      #
+      # Pass PG::EM::Client +options+ together with ConnectionPool +options+:
+      #
+      # - +:size+ = +4+ - the maximum number of Client connections
+      # - +:connection_class+ = {PG::EM::Client}
+      #
+      # @raise [ArgumentError]
+      def self.connect_defer(options = {}, &blk)
+        pool = new options.merge(lazy: true)
+        pool.__send__(:execute_deferred, blk) do
+          ::EM::DefaultDeferrable.new.tap { |df| df.succeed pool }
         end
       end
 
-      # Finishes all Client connections
+      class << self
+        alias_method :connect, :new
+        alias_method :async_connect, :connect_defer
+      end
+
+      # Current number of connections in the connection pool
+      #
+      # @return [Integer]
+      def size
+        @available.length + @allocated.length
+      end
+
+      # Finishes all available connections and clears the available pool.
+      #
+      # After call to this method the pool is still usable and will allocate
+      # new client connections when needed.
       def finish
-        (@available + @reserved.values).each {|conn| conn.finish}
+        @available.each { |c| c.finish }
+        @available.clear
+        self
       end
 
       alias_method :close, :finish
@@ -102,51 +157,51 @@ module PG
       %w[connect_timeout query_timeout async_autoreconnect on_autoreconnect].each do |name|
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}=(value)
-            (@available + @reserved.values).each {|pg| pg.#{name} = value}
+            @available.each { |c| c.#{name} = value }
+            @allocated.each_value { |c| c.#{name} = value if c.is_a?(@connection_class) }
           end
         EOD
       end
 
       %w(
-        exec              async_exec
-        exec_params       async_exec_params
-        exec_prepared     async_exec_prepared
-        prepare           async_prepare
-        describe_prepared async_describe_prepared
-        describe_portal   async_describe_portal
+        exec
+        exec_params
+        exec_prepared
+        prepare
+        describe_prepared
+        describe_portal
           ).each do |name|
 
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
-            execute { |pg| pg.#{name}(*args, &blk) }
+            execute { |c| c.#{name}(*args, &blk) }
           end
         EOD
       end
+
+      alias_method :query,       :exec
+      alias_method :async_query, :exec
+      alias_method :async_exec,  :exec
 
       %w(
-        send_query
-        send_query_prepared
-        send_prepare
-        send_describe_prepared
-        send_describe_portal
-          ).each do |send_name|
+        exec_defer
+        exec_prepared_defer
+        prepare_defer
+        describe_prepared_defer
+        describe_portal_defer
+          ).each do |name|
 
         class_eval <<-EOD, __FILE__, __LINE__
-          def #{send_name}(*args, &blk)
-            execute(true) do |pg|
-              f = Fiber.current
-              pg.#{send_name}(*args) do |res|
-                release(f)
-                blk.call res if blk
-              end
-            end
+          def #{name}(*args, &blk)
+            execute_deferred(blk) { |c| c.#{name}(*args) }
           end
         EOD
       end
 
-      alias_method :async_query, :async_exec
-      alias_method :aquery, :send_query
-      alias_method :query, :exec
+      alias_method :query_defer,       :exec_defer
+      alias_method :async_query_defer, :exec_defer
+      alias_method :async_exec_defer,  :exec_defer
+      alias_method :exec_params_defer, :exec_defer
 
       # Executes a BEGIN at the start of the block
       # and a COMMIT at the end of the block
@@ -164,50 +219,111 @@ module PG
 
       # Acquires connection and passes it to the given block.
       #
-      # If +async+ is true the connection is not released back to the
-      # available pool upon block termination.
-      # The async feature is used only internally - +#release()+ is a private method.
-      #
       # It is possible to nest execute calls from the same fiber,
       # so each time the block will be given the same {Client} instance.
       # This feature is needed e.g. for nesting transaction calls.
       # @yieldparam [Client] pg
-      def execute(async = false)
+      def execute
         fiber = Fiber.current
-        if conn = @reserved[fiber.object_id]
-          async = true
+        id = fiber.object_id
+
+        if conn = @allocated[id]
+          skip_release = true
         else
           conn = acquire(fiber)
         end
+
         begin
-          yield conn
-        rescue @disconnect_error_class => e
-          @reserved[fiber.object_id] = @acquire_cb.call conn
+          yield conn if block_given?
+
+        rescue PG::Error
+          if conn.status != PG::CONNECTION_OK
+            conn.finish unless conn.finished?
+            @allocated.delete(id)
+            skip_release = true
+          end
           raise
+        ensure
+          release(id) unless skip_release
         end
-      ensure
-        release(fiber) unless async
       end
 
       private
 
       def acquire(fiber)
         if conn = @available.pop
-          @reserved[fiber.object_id] = conn
-          conn
+          @allocated[fiber.object_id] = conn
         else
-          Fiber.yield @pending.push fiber
-          acquire(fiber)
+          if size < max_size
+            begin
+              @allocated[id = fiber.object_id] = fiber
+              conn = @connection_class.new(@options)
+            ensure
+              if conn
+                @allocated[id] = conn
+              else
+                @allocated.delete(id)
+              end
+            end
+          else
+            @pending << fiber
+            Fiber.yield
+          end
         end
       end
 
-      def release(fiber)
-        @available.push(@reserved.delete(fiber.object_id))
+      def execute_deferred(blk = nil)
+        if conn = @available.pop
+          @allocated[id = conn.object_id] = conn
+          df = yield conn
+        else
+          df = FeaturedDeferrable.new
+          id = df.object_id
+          if size < max_size
+            @allocated[id] = df
+            conn_df = @connection_class.connect_defer(@options)
+            conn_df.errback do |err|
+              @allocated.delete(id)
+              df.fail(err)
+            end
+          else
+            @pending << (conn_df = ::EM::DefaultDeferrable.new)
+          end
+          conn_df.callback do |nc|
+            @allocated[id] = conn = nc
+            df.bind_status yield conn
+          end
+        end
+        df.callback { release(id) }
+        df.errback do |err|
+          if conn
+            if err.is_a?(PG::Error) &&
+                conn.status != PG::CONNECTION_OK
+              conn.finish unless conn.finished?
+              @allocated.delete(id)
+            else
+              release(id)
+            end
+          end
+        end
+        df.completion(&blk) if blk
+        df
+      end
 
+      def release(id)
+        conn = @allocated.delete(id)
         if pending = @pending.shift
-          EM.next_tick { pending.resume }
+          if pending.is_a?(Fiber)
+            @allocated[pending.object_id] = conn
+            ::EM.next_tick { pending.resume conn }
+          else
+            pending.succeed conn
+          end
+        else
+          @available << conn
         end
       end
+
     end
   end
 end
