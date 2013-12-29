@@ -2,7 +2,7 @@ $:.unshift "lib"
 gem 'pg', ENV['EM_PG_CLIENT_TEST_PG_VERSION']
 require 'date'
 require 'em-synchrony'
-require 'em-synchrony/pg'
+require 'pg/em'
 
 describe PG::EM::Client do
 

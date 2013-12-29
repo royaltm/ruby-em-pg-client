@@ -1,7 +1,7 @@
 $:.unshift "lib"
 require 'date'
 require 'em-synchrony'
-require 'em-synchrony/pg'
+require 'pg/em'
 
 $pgserver_cmd_stop = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" stop -s -m fast]
 $pgserver_cmd_start = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" start -s -w]

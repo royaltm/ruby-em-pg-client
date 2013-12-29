@@ -1,7 +1,7 @@
 $:.unshift "lib"
 require 'eventmachine'
 require 'em-synchrony'
-require 'em-synchrony/pg'
+require 'pg/em'
 
 shared_context 'test async connect timeout' do
   it "should timeout expire while connecting" do
