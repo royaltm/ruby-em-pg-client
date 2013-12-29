@@ -56,7 +56,7 @@ describe 'connect timeout expire' do
   describe 'asynchronously using connect_timeout option'  do
     let(:options)  { {host: black_hole, connect_timeout: timeout} }
 
-    before(:all) { ENV[envvar] = nil }
+    before(:each) { ENV[envvar] = nil }
 
     include_context 'test async connect timeout'
   end
@@ -64,17 +64,17 @@ describe 'connect timeout expire' do
   describe 'asynchronously using PGCONNECT_TIMEOUT env var'  do
     let(:options)  { {host: black_hole} }
 
-    before(:all) { ENV[envvar] = timeout.to_s }
+    before(:each) { ENV[envvar] = timeout.to_s }
 
     include_context 'test async connect timeout'
 
-    after(:all) { ENV[envvar] = nil }
+    after(:each) { ENV[envvar] = nil }
   end
 
   describe 'sync-to-fiber using connect_timeout option'  do
     let(:options)  { {host: black_hole, connect_timeout: timeout} }
 
-    before(:all) { ENV[envvar] = nil }
+    before(:each) { ENV[envvar] = nil }
 
     include_context 'test synchrony connect timeout'
   end
@@ -82,10 +82,10 @@ describe 'connect timeout expire' do
   describe 'sync-to-fiber using PGCONNECT_TIMEOUT env var'  do
     let(:options)  { {host: black_hole} }
 
-    before(:all) { ENV[envvar] = timeout.to_s }
+    before(:each) { ENV[envvar] = timeout.to_s }
 
     include_context 'test synchrony connect timeout'
 
-    after(:all) { ENV[envvar] = nil }
+    after(:each) { ENV[envvar] = nil }
   end
 end
