@@ -615,8 +615,8 @@ module PG
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_portal PG::Connection#describe_portal
       #
       %w(
-        exec              query_defer
-        exec_params       query_defer
+        exec              exec_defer
+        exec_params       exec_defer
         exec_prepared     exec_prepared_defer
         prepare           prepare_defer
         describe_prepared describe_prepared_defer
