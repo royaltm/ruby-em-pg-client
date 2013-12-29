@@ -8,10 +8,12 @@ module PG
     class FeaturedDeferrable < ::EM::DefaultDeferrable
 
       def initialize(&blk)
-        if block_given?
-          callback(&blk)
-          errback(&blk)
-        end
+        completion(&blk) if block_given?
+      end
+
+      def completion(&blk)
+        callback(&blk)
+        errback(&blk)
       end
 
       def protect(fail_value = nil)
@@ -29,6 +31,12 @@ module PG
       else
         ::EM.next_tick { succeed ret }
         ret
+      end
+
+      # bind deferred status of this deferrable to other +df+
+      def bind_status(df)
+        df.callback { |*a| succeed(*a) }
+        df.errback  { |*a| fail(*a) }
       end
     end
 

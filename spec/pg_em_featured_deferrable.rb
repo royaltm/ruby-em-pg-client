@@ -28,6 +28,34 @@ describe PG::EM::FeaturedDeferrable do
     df.fail(:err)
   end
 
+  it "should set completion with block" do
+    cb.should_receive(:call).with(:err)
+    df = subject.new
+    df.completion(&cb)
+    df.fail(:err)
+    df.succeed(:result)
+
+    cb.should_receive(:call).with(:result)
+    df = subject.new
+    df.completion(&cb)
+    df.succeed(:result)
+    df.fail(:err)
+  end
+
+  it "should bind status to another deferrable" do
+    cb.should_receive(:call).with(:result)
+    df = subject.new(&cb)
+    other_df = subject.new
+    df.bind_status(other_df)
+    other_df.succeed(:result)
+
+    cb.should_receive(:call).with(:err)
+    df = subject.new(&cb)
+    other_df = subject.new
+    df.bind_status(other_df)
+    other_df.fail(:err)
+  end
+
   shared_context 'shared protect' do
     it "should call df.fail and return nil" do
       ::EM.stub(:next_tick) {|&cb| cb.call }
@@ -57,7 +85,6 @@ describe PG::EM::FeaturedDeferrable do
     end
 
     include_context 'shared protect'
-
   end
 
   context "#protect_and_succeed" do
