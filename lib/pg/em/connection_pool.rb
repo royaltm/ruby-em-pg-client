@@ -256,7 +256,8 @@ module PG
         else
           if size < max_size
             begin
-              @allocated[id = fiber.object_id] = fiber
+              id = fiber.object_id
+              @allocated[id] = fiber
               conn = @connection_class.new(@options)
             ensure
               if conn
@@ -274,7 +275,8 @@ module PG
 
       def execute_deferred(blk = nil)
         if conn = @available.pop
-          @allocated[id = conn.object_id] = conn
+          id = conn.object_id
+          @allocated[id] = conn
           df = yield conn
         else
           df = FeaturedDeferrable.new

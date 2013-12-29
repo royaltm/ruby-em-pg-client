@@ -381,48 +381,67 @@ module PG
       # @!visibility private
       # Perform auto re-connect. Used internally.
       def async_autoreconnect!(deferrable, error, &send_proc)
-        if self.status != PG::CONNECTION_OK
-          if async_autoreconnect
-            was_in_transaction = case @last_transaction_status
-            when PG::PQTRANS_IDLE, PG::PQTRANS_UNKNOWN
-              false
-            else
-              true
-            end
-            reset_df = reset_defer
-            reset_df.errback { |ex| deferrable.fail ex }
-            reset_df.callback do
-              if on_autoreconnect
-                Fiber.new do
-                  returned_df = on_autoreconnect.call(self, error)
-                  if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
-                    returned_df.callback do
-                      if was_in_transaction
-                        deferrable.fail error
-                      else
-                        deferrable.protect(&send_proc)
-                      end
-                    end
-                    returned_df.errback { |ex| deferrable.fail ex }
-                  elsif returned_df.is_a?(Exception)
-                    ::EM.next_tick { deferrable.fail returned_df }
-                  elsif returned_df == false || (was_in_transaction && returned_df != true)
-                    ::EM.next_tick { deferrable.fail error }
-                  else
-                    deferrable.protect(&send_proc)
-                  end
-                end.resume
-              elsif was_in_transaction
-                # after re-connecting transaction is lost anyway
-                ::EM.next_tick { deferrable.fail error }
-              else
-                deferrable.protect(&send_proc)
-              end
-            end
+        # reconnect only if connection is bad and flag is set
+        if self.status != PG::CONNECTION_OK && async_autoreconnect
+          # check if transaction was active
+          was_in_transaction = case @last_transaction_status
+          when PG::PQTRANS_IDLE, PG::PQTRANS_UNKNOWN
+            false
           else
-            ::EM.next_tick { deferrable.fail error }
+            true
+          end
+          # reset asynchronously
+          reset_df = reset_defer
+          # just fail on reset failure
+          reset_df.errback { |ex| deferrable.fail ex }
+          # reset succeeds
+          reset_df.callback do
+            # handle on_autoreconnect
+            if on_autoreconnect
+              # wrap in a fiber, so on_autoreconnect code may yield from it
+              Fiber.new do
+                # call on_autoreconnect handler and fail if it raises an error
+                returned_df = begin
+                  on_autoreconnect.call(self, error)
+                rescue => ex
+                  ex
+                end
+                if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                  # the handler returned a deferrable
+                  returned_df.callback do
+                    if was_in_transaction
+                      # there was a transaction in progress, fail anyway
+                      deferrable.fail error
+                    else
+                      # try to call failed query command again
+                      deferrable.protect(&send_proc)
+                    end
+                  end
+                  # fail when handler's deferrable fails
+                  returned_df.errback { |ex| deferrable.fail ex }
+                elsif returned_df.is_a?(Exception)
+                  # tha handler returned an exception object, so fail with it
+                  ::EM.next_tick { deferrable.fail returned_df }
+                elsif returned_df == false || (was_in_transaction && returned_df != true)
+                  # tha handler returned false or raised an exception
+                  # or there was an active transaction and handler didn't return true
+                  ::EM.next_tick { deferrable.fail error }
+                else
+                  # try to call failed query command again
+                  deferrable.protect(&send_proc)
+                end
+              end.resume
+            elsif was_in_transaction
+              # there was a transaction in progress, fail anyway
+              ::EM.next_tick { deferrable.fail error }
+            else
+              # no on_autoreconnect handler, no transaction, then
+              # try to call failed query command again
+              deferrable.protect(&send_proc)
+            end
           end
         else
+          # connection is good, or the async_autoreconnect is not set
           ::EM.next_tick { deferrable.fail error }
         end
       end
@@ -691,32 +710,54 @@ module PG
       def transaction
         raise ArgumentError, 'Must supply block for PG::EM::Client#transaction' unless block_given?
         tcount = @client_tran_count.to_i
+
         case transaction_status
         when PG::PQTRANS_IDLE
+          # there is no transaction yet, so let's begin
           exec(TRAN_BEGIN_QUERY)
+          # reset transaction count in case user code rolled it back before
           tcount = 0 if tcount != 0
         when PG::PQTRANS_INTRANS
+          # transaction in progress, leave it be
         else
+          # transaction failed, is in unknown state or command is active
+          # in any case calling begin will raise server transaction error
           exec(TRAN_BEGIN_QUERY) # raises PG::InFailedSqlTransaction
         end
+        # memoize nested count
         @client_tran_count = tcount + 1
         begin
+
           result = yield self
+
         rescue
+          # error was raised
           case transaction_status
           when PG::PQTRANS_INTRANS, PG::PQTRANS_INERROR
+            # do not rollback if transaction was rolled back before
+            # or is in unknown state, which means connection reset is needed
+            # and rollback only from the outermost transaction block
             exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
           end
+          # raise again
           raise
         else
+          # we are good (but not out of woods yet)
           case transaction_status
           when PG::PQTRANS_INTRANS
+            # commit only from the outermost transaction block
             exec(TRAN_COMMIT_QUERY) if tcount.zero?
           when PG::PQTRANS_INERROR
+            # no ruby error was raised (or an error was rescued in code block)
+            # but there was an sql error anyway
+            # so rollback after the outermost block
             exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
           when PG::PQTRANS_IDLE
+            # the code block has terminated the transaction on its own
+            # so just reset the counter
             tcount = 0
           else
+            # something isn't right, so provoke an error just in case
             exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
           end
           result
