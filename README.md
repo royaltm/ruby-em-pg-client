@@ -31,7 +31,7 @@ Bugs/Limitations
 ----------------
 
 * no async support for: COPY commands (`get_copy_data`,  `put_copy_data`),
-  `wait_for_notify` and `transaction`
+  `wait_for_notify`
 * actually no ActiveRecord support (you are welcome to contribute).
 
 API Changes between versions
@@ -47,10 +47,10 @@ E.g. the `#async_exec` is now an alias to `#exec`.
 The other reason was to get rid of the ugly em / em-synchrony duality.
 
 * There is no separate em-synchrony client version anymore.
-* The methods returning Deferrable ha`ve now the `*_defer` suffix.
+* The methods returning Deferrable have now the `*_defer` suffix.
 * The `#async_exec` and `#async_query` (in <= 0.2 they were deferrable methods)
   are now aliases to `#exec`.
-* The `pg` command methods `#exec`, `#query`, `#exec_*`, `#describe_*` now behave
+* The command methods `#exec`, `#query`, `#exec_*`, `#describe_*` behave
   the same as in `em-synchrony/pg` <= 0.2 client.
 * The following methods were removed:
 

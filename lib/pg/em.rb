@@ -236,6 +236,7 @@ module PG
       end
 
       class << self
+        # @deprecated Use {connect_defer} instead.
         alias_method :async_connect, :connect_defer
       end
 
@@ -267,6 +268,7 @@ module PG
         df
       end
 
+      # @deprecated Use {reset_defer} instead.
       alias_method :async_reset, :reset_defer
 
       # @!endgroup
