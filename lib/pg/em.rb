@@ -421,11 +421,11 @@ module PG
                   returned_df.errback { |ex| deferrable.fail ex }
                 elsif returned_df.is_a?(Exception)
                   # tha handler returned an exception object, so fail with it
-                  ::EM.next_tick { deferrable.fail returned_df }
+                  deferrable.fail returned_df
                 elsif returned_df == false || (was_in_transaction && returned_df != true)
                   # tha handler returned false or raised an exception
                   # or there was an active transaction and handler didn't return true
-                  ::EM.next_tick { deferrable.fail error }
+                  deferrable.fail error
                 else
                   # try to call failed query command again
                   deferrable.protect(&send_proc)
@@ -433,7 +433,7 @@ module PG
               end.resume
             elsif was_in_transaction
               # there was a transaction in progress, fail anyway
-              ::EM.next_tick { deferrable.fail error }
+              deferrable.fail error
             else
               # no on_autoreconnect handler, no transaction, then
               # try to call failed query command again
@@ -442,7 +442,7 @@ module PG
           end
         else
           # connection is good, or the async_autoreconnect is not set
-          ::EM.next_tick { deferrable.fail error }
+          deferrable.fail error
         end
       end
 
@@ -534,7 +534,7 @@ module PG
             @last_transaction_status = transaction_status
             send_proc.call
           rescue PG::Error => e
-            async_autoreconnect!(df, e, &send_proc)
+            ::EM.next_tick { async_autoreconnect!(df, e, &send_proc) }
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }
           end
