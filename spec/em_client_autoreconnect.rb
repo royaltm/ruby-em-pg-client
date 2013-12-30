@@ -77,7 +77,16 @@ describe 'pg-em default autoreconnect' do
     @tested_proc.call
   end
 
-  it "should raise an error when in transaction after server restart" do
+  it "should fail on invalid query after server restart" do
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.query_defer('SELLECT 1') do |ex|
+      ex.should be_an_instance_of PG::SyntaxError
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should fail when in transaction after server restart" do
     @client.query_defer('BEGIN') do |result|
       result.should be_an_instance_of PG::Result
       system($pgserver_cmd_stop).should be_true
@@ -124,7 +133,16 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     @tested_proc.call
   end
 
-  it "should raise an error when in transaction after server restart" do
+  it "should fail on invalid query after server restart" do
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.query_defer('SELLECT 1') do |ex|
+      ex.should be_an_instance_of PG::SyntaxError
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should fail when in transaction after server restart" do
     @client.query_defer('BEGIN') do |result|
       result.should be_an_instance_of PG::Result
       system($pgserver_cmd_stop).should be_true
@@ -134,6 +152,61 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
         @tested_proc.call
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
+  end
+
+  it "should fail on false from on_autoreconnect after server restart" do
+    @client.on_autoreconnect = proc { false }
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
+      ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should complete on true from on_autoreconnect after server restart" do
+    @client.on_autoreconnect = proc { true }
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.query_defer('SELECT pg_database_size(current_database());') do |result|
+      result.should be_an_instance_of PG::Result
+      result[0]['pg_database_size'].to_i.should be > 0
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should fail on query with true from on_autoreconnect after restart" do
+    @client.on_autoreconnect = proc { true }
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.query_defer('SELLECT 1') do |ex|
+      ex.should be_an_instance_of PG::SyntaxError
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should fail on on_autoreconnect deferrable fail after server restart" do
+    @client.on_autoreconnect = proc do
+      ::EM::DefaultDeferrable.new.tap {|df| df.fail :boo }
+    end
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.query_defer('SELECT 1') do |ex|
+      ex.should be :boo
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should fail on raised error in on_autoreconnect after server restart" do
+    @client.on_autoreconnect = proc do
+      raise TypeError
+    end
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.query_defer('SELECT 1') do |ex|
+      ex.should be_an_instance_of TypeError
+      EM.stop
+    end.should be_a_kind_of ::EM::DefaultDeferrable
   end
 
   before(:all) do
