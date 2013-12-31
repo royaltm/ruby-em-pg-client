@@ -17,7 +17,7 @@ Gem::Specification.new do |s|
   s.rdoc_options << "--title" << "em-pg-client" <<
     "--main" << "README.md"
   s.has_rdoc = true
-  s.extra_rdoc_files = ["README.md", "BENCHMARKS.md", "LICENCE"]
+  s.extra_rdoc_files = ["README.md", "BENCHMARKS.md", "LICENCE", "HISTORY.md"]
   s.requirements << "PostgreSQL server"
   s.add_runtime_dependency "pg", ">= 0.17.0"
   s.add_runtime_dependency "eventmachine", "~> 1.0.0"
