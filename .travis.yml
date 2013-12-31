@@ -28,4 +28,4 @@ before_install:
     -s -w"
   - export PGUSER=postgres
   - psql -c 'create database test;' -h "$PGHOST_UNIX"
-script: rake test:all
+script: bundle exec rake test_with_coveralls
