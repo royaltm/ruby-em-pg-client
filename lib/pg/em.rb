@@ -178,15 +178,17 @@ module PG
       # environment variable name for connect_timeout fallback value
       @@connect_timeout_envvar = conndefaults.find{|d| d[:keyword] == "connect_timeout" }[:envvar]
 
+      DEFAULT_ASYNC_VARS = {
+        :@async_autoreconnect => nil,
+        :@connect_timeout => nil,
+        :@query_timeout => 0,
+        :@on_autoreconnect => nil,
+        :@async_command_aborted => false,
+      }.freeze
+
       # @!visibility private
       def self.parse_async_options(args)
-        options = {
-          :@async_autoreconnect => nil,
-          :@connect_timeout => nil,
-          :@query_timeout => 0,
-          :@on_autoreconnect => nil,
-          :@async_command_aborted => false,
-        }
+        options = DEFAULT_ASYNC_VARS.dup
         if args.last.is_a? Hash
           args[-1] = args.last.reject do |key, value|
             case key.to_sym
