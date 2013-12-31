@@ -8,7 +8,10 @@ module PG
     # Author:: Rafal Michalski
     #
     # The ConnectionPool allocates new connections asynchronously when
-    # there are no available connections left up to the {#max_size} number.
+    # there are no free connections left up to the {#max_size} number.
+    #
+    # If {Client#async_autoreconnect} option is not set or the re-connect fails
+    # the failed connection is dropped from the pool.
     #
     # @example Basic usage
     #   pg = PG::EM::ConnectionPool.new size: 10, dbname: 'foo'
@@ -16,7 +19,7 @@ module PG
     #
     # The list of {Client} command methods that are available in {ConnectionPool}:
     #
-    # Blocking command methods:
+    # Fiber synchronized methods:
     #
     # * {Client#exec}
     # * {Client#query}
@@ -28,7 +31,7 @@ module PG
     # * {Client#describe_prepared}
     # * {Client#describe_portal}
     #
-    # Deferrable command methods:
+    # The asynchronous command methods:
     #
     # * {Client#exec_defer}
     # * {Client#query_defer}
@@ -40,25 +43,38 @@ module PG
     # * {Client#describe_prepared_defer}
     # * {Client#describe_portal_defer}
     #
-    # If {Client#async_autoreconnect} option is not set or the re-connect fails
-    # the failed connection is dropped from the pool.
+    # The pool will only allow for {#max_size} commands (both deferred and
+    # fiber synchronized) to be performed concurrently. The pending requests
+    # will be queued and executed when connections become available.
+    #
+    # Please keep in mind, that the above methods may send commands to
+    # different clients from the pool each time they are called. You can't
+    # assume anything about which connection is acquired even if the
+    # {#max_size} of the pool is set to one. This is because no connection
+    # will be shared between two concurrent requests and the connections
+    # maight occasionally fail and they will be dropped from the pool.
+    #
+    # This prevents the `*_defer` commands to execute transactions.
+    #
+    # For transactions use {#transaction} and fiber synchronized methods.
     class ConnectionPool
 
       DEFAULT_SIZE = 4
 
       # Maximum number of connections in the connection pool
+      # @return [Integer]
       attr_reader :max_size
 
       attr_reader :available, :allocated
 
-      # Creates and initializes new connection pool.
+      # Creates and initializes a new connection pool.
       #
       # The connection pool allocates its first connection upon initialization
       # unless +lazy: true+ option is given.
       #
       # Pass PG::EM::Client +options+ together with ConnectionPool +options+:
       #
-      # - +:size+ = +4+ - the maximum number of Client connections
+      # - +:size+ = +4+ - the maximum number of concurrent connections
       # - +:lazy+ = false - should lazy allocate first connection
       # - +:connection_class+ = {PG::EM::Client}
       #
@@ -99,11 +115,11 @@ module PG
       #
       # @return [FeaturedDeferrable]
       # @yieldparam pg [Client|PG::Error] new and connected client instance
-      #             on success or a PG::Error
+      #             on success or a raised PG::Error
       #
-      # Use the returned deferrable's hooks +callback+ to obtain newly created
+      # Use the returned deferrable's +callback+ hook to obtain newly created
       # {ConnectionPool}.
-      # In case of a connection error +errback+ hook is called instead with
+      # In case of a connection error +errback+ hook is called with
       # a raised error object as its argument.
       #
       # If the block is provided it's bound to both +callback+ and +errback+
@@ -111,7 +127,7 @@ module PG
       #
       # Pass PG::EM::Client +options+ together with ConnectionPool +options+:
       #
-      # - +:size+ = +4+ - the maximum number of Client connections
+      # - +:size+ = +4+ - the maximum number of concurrent connections
       # - +:connection_class+ = {PG::EM::Client}
       #
       # @raise [ArgumentError]
@@ -136,8 +152,8 @@ module PG
 
       # Finishes all available connections and clears the available pool.
       #
-      # After call to this method the pool is still usable and will allocate
-      # new client connections when needed.
+      # After call to this method the pool is still usable and will try to
+      # allocate new client connections on subsequent query commands.
       def finish
         @available.each { |c| c.finish }
         @available.clear
@@ -234,17 +250,32 @@ module PG
       # Calls to transaction may be nested,
       # however without sub-transactions (save points).
       #
+      # @example Transactions
+      #   pg = PG::EM::ConnectionPool.new size: 10
+      #   pg.transaction do
+      #     pg.exec('insert into animals (family, species) values ($1,$2)',
+      #             [family, species])
+      #     num = pg.query('select count(*) from people where family=$1',
+      #             [family]).get_value(0,0)
+      #     pg.exec('update stats set count = $1 where family=$2',
+      #             [num, family])
+      #   end
+      #
       # @see Client#transaction
-      # @see #execute
+      # @see #hold
       def transaction(&blk)
         hold do |pg|
           pg.transaction(&blk)
         end
       end
 
-      # Acquires connection and passes it to the given block.
+      # Acquires {Client} connection and passes it to the given block.
       #
-      # It is possible to nest execute calls from the same fiber,
+      # The connection is allocated to the current fiber and ensures that
+      # any subsequent query from the same fiber will be performed on
+      # the connection.
+      #
+      # It is possible to nest hold calls from the same fiber,
       # so each time the block will be given the same {Client} instance.
       # This feature is needed e.g. for nesting transaction calls.
       # @yieldparam [Client] pg
