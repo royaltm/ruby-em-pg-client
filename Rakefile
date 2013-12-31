@@ -4,6 +4,10 @@ task :default => [:test]
 
 $gem_name = "em-pg-client"
 
+def windows_os?
+  RbConfig::CONFIG['host_os'] =~ /cygwin|mswin|mingw|bccwin|wince|emx/
+end
+
 desc "Run tests"
 task :test => :'test:safe'
 
@@ -31,7 +35,7 @@ namespace :test do
       spec/em_client.rb
       spec/em_synchrony_client.rb
     ].each do |spec|
-      sh env_unix_socket, "rspec #{spec}"
+      sh env_unix_socket, "rspec #{spec}" unless windows_os?
       sh env_tcpip, "rspec #{spec}"
     end
   end
@@ -43,7 +47,7 @@ namespace :test do
       spec/em_client_autoreconnect.rb
       spec/em_synchrony_client_autoreconnect.rb
     ].each do |spec|
-      sh env_unix_socket, "rspec #{spec}"
+      sh env_unix_socket, "rspec #{spec}" unless windows_os?
       sh env_tcpip, "rspec #{spec}"
     end
   end
