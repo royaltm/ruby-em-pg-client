@@ -13,45 +13,76 @@ task :test => :'test:safe'
 
 namespace :test do
   env_common = {'PGDATABASE' => 'test'}
-  env_unix_socket = env_common.merge('PGHOST' => ENV['PGHOST_UNIX'] || '/tmp')
-  env_tcpip = env_common.merge('PGHOST' => 'localhost')
+  env_unix = env_common.merge('PGHOST' => ENV['PGHOST_UNIX'] || '/tmp')
+  env_inet = env_common.merge('PGHOST' => 'localhost')
 
   task :warn do
-    puts "WARNING: The test needs to be run with an available local PostgreSQL server"
+    puts "WARNING: The tests needs to be run with an available local PostgreSQL server"
   end
 
   desc "Run specs only"
-  task :spec do
-    sh "rspec spec/pg_em_featured_deferrable.rb"
-    sh "rspec spec/pg_em_client_options.rb"
-    sh "rspec spec/pg_em_client_connect_finish.rb"
-    sh "rspec spec/pg_em_client_connect_timeout.rb"
-    sh "rspec spec/pg_em_connection_pool.rb"
+  task :spec => [:spec_defer, :spec_pool, :spec_client]
+
+  task :spec_client do
+    sh({'COVNAME'=>'spec:client'},     "rspec spec/pg_em_client_*.rb")
+  end
+
+  task :spec_pool do
+    sh({'COVNAME'=>'spec:pool'},       "rspec spec/pg_em_connection_pool.rb")
+  end
+
+  task :spec_defer do
+    sh({'COVNAME'=>'spec:deferrable'}, "rspec spec/pg_em_featured_deferrable.rb")
   end
 
   desc "Run safe tests only"
-  task :safe => [:warn, :spec] do
-    %w[
-      spec/em_client.rb
-      spec/em_synchrony_client.rb
-    ].each do |spec|
-      sh env_unix_socket, "rspec #{spec}" unless windows_os?
-      sh env_tcpip, "rspec #{spec}"
+  task :safe  => [:warn, :spec, :async, :fiber]
+  task :async => [:async_inet, :async_unix]
+  task :fiber => [:fiber_inet, :fiber_unix]
+
+  task :async_inet do
+    sh env_inet.merge('COVNAME'=>'async:inet'), "rspec spec/em_client_autoreconnect.rb"
+  end
+
+  task :async_unix do
+    sh env_unix.merge('COVNAME'=>'async:unix'), "rspec spec/em_client_autoreconnect.rb" unless windows_os?
+  end
+
+  task :fiber_inet do
+    sh env_inet.merge('COVNAME'=>'fiber:inet'), "rspec spec/em_synchrony_client_autoreconnect.rb"
+  end
+
+  task :fiber_unix do
+    sh env_unix.merge('COVNAME'=>'fiber:unix'), "rspec spec/em_synchrony_client_autoreconnect.rb" unless windows_os?
+  end
+
+  task :pgdata_check do
+    unless ENV['PGDATA'] || (ENV['PG_CTL_STOP_CMD'] && ENV['PG_CTL_START_CMD'])
+      raise "Set PGDATA environment variable before running the autoreconnect tests."
     end
   end
 
   desc "Run unsafe tests only"
-  task :unsafe => :warn do
-    unless ENV['PGDATA'] || (ENV['PG_CTL_STOP_CMD'] && ENV['PG_CTL_START_CMD'])
-      raise "Set PGDATA environment variable before running the autoreconnect tests."
-    end
-    %w[
-      spec/em_client_autoreconnect.rb
-      spec/em_synchrony_client_autoreconnect.rb
-    ].each do |spec|
-      sh env_unix_socket, "rspec #{spec}" unless windows_os?
-      sh env_tcpip, "rspec #{spec}"
-    end
+  task :unsafe => [:warn, :pgdata_check,
+    :async_autoreconnect_inet,
+    :async_autoreconnect_unix,
+    :fiber_autoreconnect_inet,
+    :fiber_autoreconnect_unix]
+
+  task :async_autoreconnect_inet do
+    sh env_inet.merge('COVNAME'=>'async:autoreconnect:inet'), "rspec spec/em_client_autoreconnect.rb"
+  end
+
+  task :async_autoreconnect_unix do
+    sh env_unix.merge('COVNAME'=>'async:autoreconnect:unix'), "rspec spec/em_client_autoreconnect.rb"
+  end
+
+  task :fiber_autoreconnect_inet do
+    sh env_inet.merge('COVNAME'=>'fiber:autoreconnect:inet'), "rspec spec/em_synchrony_client_autoreconnect.rb"
+  end
+
+  task :fiber_autoreconnect_unix do
+    sh env_unix.merge('COVNAME'=>'fiber:autoreconnect:unix'), "rspec spec/em_synchrony_client_autoreconnect.rb"
   end
 
   desc "Run safe and unsafe tests"
