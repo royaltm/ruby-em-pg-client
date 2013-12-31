@@ -90,7 +90,7 @@ module PG
         raise ArgumentError, "#{self.class}.new: pool size must be > 1" if @max_size < 1
 
         # allocate first connection, unless we are lazy
-        execute unless lazy
+        hold unless lazy
       end
 
       # Creates and initializes new connection pool.
@@ -117,7 +117,7 @@ module PG
       # @raise [ArgumentError]
       def self.connect_defer(options = {}, &blk)
         pool = new options.merge(lazy: true)
-        pool.__send__(:execute_deferred, blk) do
+        pool.__send__(:hold_deferred, blk) do
           ::EM::DefaultDeferrable.new.tap { |df| df.succeed pool }
         end
       end
@@ -146,25 +146,55 @@ module PG
 
       alias_method :close, :finish
 
-      # @!attribute [w] connect_timeout
-      #   Sets {Client#connect_timeout} on all connections in this pool
-      # @!attribute [w] query_timeout
-      #   Sets {Client#query_timeout} on all connections in this pool
-      # @!attribute [w] async_autoreconnect
-      #   Sets {Client#async_autoreconnect} on all connections in this pool
-      # @!attribute [w] on_autoreconnect
-      #   Sets {Client#on_autoreconnect} on all connections in this pool
-      %w[connect_timeout query_timeout async_autoreconnect on_autoreconnect].each do |name|
+      class DeferredOptions < Hash
+        def apply(conn)
+          each_pair { |n,v| conn.__send__(n, v) }
+        end
+      end
+      # @!attribute [rw] connect_timeout
+      #   @return [Float] connection timeout in seconds
+      #   Set {Client#connect_timeout} on all present and future connections
+      #   in this pool or read value from options
+      # @!attribute [rw] query_timeout
+      #   @return [Float] query timeout in seconds
+      #   Set {Client#query_timeout}  on all present and future connections
+      #   in this pool or read value from options
+      # @!attribute [rw] async_autoreconnect
+      #   @return [Boolean] asynchronous auto re-connect status
+      #   Set {Client#async_autoreconnect}  on all present and future connections
+      #   in this pool or read value from options
+      # @!attribute [rw] on_autoreconnect
+      #   @return [Proc<Client, Error>] auto re-connect hook
+      #   Set {Client#on_autoreconnect} on all present and future connections
+      #   in this pool or read value from options
+      %w[connect_timeout
+         query_timeout
+         async_autoreconnect
+         on_autoreconnect].each do |name|
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}=(value)
-            @available.each { |c| c.#{name} = value }
-            @allocated.each_value { |c| c.#{name} = value if c.is_a?(@connection_class) }
+            @options[:#{name}] = value
+            b = proc { |c| c.#{name} = value }
+            @available.each(&b)
+            @allocated.each_value(&b)
+          end
+
+          def #{name}
+            @options[:#{name}] || @options['#{name}']
+          end
+        EOD
+        DeferredOptions.class_eval <<-EOD, __FILE__, __LINE__
+          def #{name}=(value)
+            self[:#{name}=] = value
           end
         EOD
       end
 
       %w(
         exec
+        query
+        async_exec
+        async_query
         exec_params
         exec_prepared
         prepare
@@ -174,17 +204,17 @@ module PG
 
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
-            execute { |c| c.#{name}(*args, &blk) }
+            hold { |c| c.#{name}(*args, &blk) }
           end
         EOD
       end
 
-      alias_method :query,       :exec
-      alias_method :async_query, :exec
-      alias_method :async_exec,  :exec
-
       %w(
         exec_defer
+        query_defer
+        async_query_defer
+        async_exec_defer
+        exec_params_defer
         exec_prepared_defer
         prepare_defer
         describe_prepared_defer
@@ -193,15 +223,10 @@ module PG
 
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
-            execute_deferred(blk) { |c| c.#{name}(*args) }
+            hold_deferred(blk) { |c| c.#{name}(*args) }
           end
         EOD
       end
-
-      alias_method :query_defer,       :exec_defer
-      alias_method :async_query_defer, :exec_defer
-      alias_method :async_exec_defer,  :exec_defer
-      alias_method :exec_params_defer, :exec_defer
 
       # Executes a BEGIN at the start of the block
       # and a COMMIT at the end of the block
@@ -212,7 +237,7 @@ module PG
       # @see Client#transaction
       # @see #execute
       def transaction(&blk)
-        execute do |pg|
+        hold do |pg|
           pg.transaction(&blk)
         end
       end
@@ -223,14 +248,14 @@ module PG
       # so each time the block will be given the same {Client} instance.
       # This feature is needed e.g. for nesting transaction calls.
       # @yieldparam [Client] pg
-      def execute
+      def hold
         fiber = Fiber.current
         id = fiber.object_id
 
         if conn = @allocated[id]
           skip_release = true
         else
-          conn = acquire(fiber)
+          conn = acquire(fiber) until conn
         end
 
         begin
@@ -239,7 +264,7 @@ module PG
         rescue PG::Error
           if conn.status != PG::CONNECTION_OK
             conn.finish unless conn.finished?
-            @allocated.delete(id)
+            drop_failed(id)
             skip_release = true
           end
           raise
@@ -248,8 +273,21 @@ module PG
         end
       end
 
+      alias_method :execute, :hold
+
+      def method_missing(*a, &b)
+        hold { |c| c.__send__(*a, &b) }
+      end
+
+      def respond_to_missing?(m, priv = false)
+        hold { |c| c.respond_to?(m, priv) }
+      end
+
       private
 
+      # Get available connection or create a new one, or put on hold
+      # @return [Client] on success
+      # @return [nil] when dropped connection creates a free slot
       def acquire(fiber)
         if conn = @available.pop
           @allocated[fiber.object_id] = conn
@@ -257,13 +295,16 @@ module PG
           if size < max_size
             begin
               id = fiber.object_id
-              @allocated[id] = fiber
+              # mark allocated pool for proper #size value
+              # the connecting process will yield from fiber
+              @allocated[id] = opts = DeferredOptions.new
               conn = @connection_class.new(@options)
             ensure
               if conn
+                opts.apply conn
                 @allocated[id] = conn
               else
-                @allocated.delete(id)
+                drop_failed(id)
               end
             end
           else
@@ -273,7 +314,20 @@ module PG
         end
       end
 
-      def execute_deferred(blk = nil)
+      # Asynchronously acquires {Client} connection and passes it to the
+      # given block on success.
+      #
+      # The block will receive the acquired connection as its argument and
+      # should return a deferrable object which is either returned from
+      # this method or is being status-bound to another deferrable returned
+      # from this method.
+      #
+      # @param blk [Proc] optional block passed to +callback+ and +errback+
+      #               of the returned deferrable object
+      # @yieldparam pg [Client] a connected client instance
+      # @yieldreturn [EM::Deferrable]
+      # @return [EM::Deferrable]
+      def hold_deferred(blk = nil)
         if conn = @available.pop
           id = conn.object_id
           @allocated[id] = conn
@@ -281,17 +335,7 @@ module PG
         else
           df = FeaturedDeferrable.new
           id = df.object_id
-          if size < max_size
-            @allocated[id] = df
-            conn_df = @connection_class.connect_defer(@options)
-            conn_df.errback do |err|
-              @allocated.delete(id)
-              df.fail(err)
-            end
-          else
-            @pending << (conn_df = ::EM::DefaultDeferrable.new)
-          end
-          conn_df.callback do |nc|
+          acquire_deferred(df) do |nc|
             @allocated[id] = conn = nc
             df.bind_status yield conn
           end
@@ -302,7 +346,7 @@ module PG
             if err.is_a?(PG::Error) &&
                 conn.status != PG::CONNECTION_OK
               conn.finish unless conn.finished?
-              @allocated.delete(id)
+              drop_failed(id)
             else
               release(id)
             end
@@ -312,12 +356,54 @@ module PG
         df
       end
 
+      # Asynchronously create a new connection or get the released one
+      #
+      # @param df [EM::Deferrable] - the acquiring object and the one to fail
+      #                         when establishing connection fails
+      # @return [EM::Deferrable] the deferrable that will succeed with either
+      #                          new or released connection
+      def acquire_deferred(df, &blk)
+        id = df.object_id
+        if size < max_size
+          # mark allocated pool for proper #size value
+          # the connection is made asynchronously
+          @allocated[id] = opts = DeferredOptions.new
+          @connection_class.connect_defer(@options).callback {|conn|
+            opts.apply conn
+          }.errback do |err|
+            drop_failed(id)
+            df.fail(err)
+          end
+        else
+          @pending << (conn_df = ::EM::DefaultDeferrable.new)
+          conn_df.errback do
+            # a dropped connection made a free slot
+            acquire_deferred(df, &blk)
+          end
+        end.callback(&blk)
+      end
+
+      # drop a failed connection (or a mark) from the pool and
+      # ensure that the pending requests won't starve
+      def drop_failed(id)
+        @allocated.delete(id)
+        if pending = @pending.shift
+          if pending.is_a?(Fiber)
+            pending.resume
+          else
+            pending.fail
+          end
+        end
+      end
+
+      # release connection and pass it to the next pending
+      # request or back to the free pool
       def release(id)
         conn = @allocated.delete(id)
         if pending = @pending.shift
           if pending.is_a?(Fiber)
             @allocated[pending.object_id] = conn
-            ::EM.next_tick { pending.resume conn }
+            pending.resume conn
           else
             pending.succeed conn
           end
