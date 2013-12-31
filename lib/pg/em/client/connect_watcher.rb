@@ -3,7 +3,7 @@ module PG
     class Client < PG::Connection
 
       # This module is used as a handler to ::EM.watch connection socket and
-      # performs connection handshake with postgres server in asynchronous manner.
+      # it performs connection handshake with postgres server asynchronously.
       #
       # Author:: Rafal Michalski
       module ConnectWatcher

@@ -3,7 +3,7 @@ module PG
     class Client < PG::Connection
 
       # This module is used as a handler to ::EM.watch connection socket and
-      # extract query results in a non-blocking manner.
+      # it extracts query results in a non-blocking manner.
       #
       # Author:: Rafal Michalski
       module Watcher
