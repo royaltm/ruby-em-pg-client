@@ -8,4 +8,5 @@ Thumbs.db
 /*.sublime-project
 /*.sublime-workspace
 sftp-config.json
-.rspec
+/coverage
+Gemfile.lock
