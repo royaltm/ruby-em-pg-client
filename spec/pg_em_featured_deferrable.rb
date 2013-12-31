@@ -17,16 +17,37 @@ describe PG::EM::FeaturedDeferrable do
     end
   }
 
-  it "should set callback with block" do
+  it "should set callback with a block " do
     cb.should_receive(:call).with(:result)
     df = subject.new(&cb)
     df.succeed(:result)
   end
 
-  it "should set errback with block" do
+  it "should set errback with a block" do
     cb.should_receive(:call).with(:err)
     df = subject.new(&cb)
     df.fail(:err)
+  end
+
+  it "should execute callbacks and errbacks in setup order" do
+    results = []
+    setup_callbacks = proc do |df|
+      df.callback { results << 1 }
+      df.callback { results << 2 }
+      df.callback { results << 3 }
+      df.errback  { results << 4 }
+      df.errback  { results << 5 }
+      df.errback  { results << 6 }
+    end
+    df = subject.new
+    setup_callbacks.call df
+    df.succeed
+    df.fail
+    df = subject.new
+    setup_callbacks.call df
+    df.fail
+    df.succeed
+    results.should eq [1, 2, 3, 4, 5, 6]
   end
 
   it "should set completion with block" do
