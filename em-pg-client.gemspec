@@ -24,4 +24,6 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency "eventmachine", "~> 1.0.0"
   s.add_development_dependency "rspec", "~> 2.14"
   s.add_development_dependency "em-synchrony", "~> 1.0.0"
+  s.add_development_dependency "coveralls", ">= 0.7.0"
+  s.add_development_dependency "simplecov", ">= 0.8.2"
 end
