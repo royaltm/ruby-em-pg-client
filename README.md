@@ -340,7 +340,7 @@ The other reason was to get rid of the ugly em / em-synchrony duality.
   as their names were confusing due to the unfortunate `#async_exec`.
 
 * The `async_connect` and `#async_reset` are renamed to `connect_defer` and `#reset_defer`
-  respectively but still exists as deprecated aliases.
+  respectively.
 
 ### 0.1.x -> 0.2.x
 
@@ -371,9 +371,9 @@ More Info
 This implementation makes use of non-blocking:
 [PGConn#is_busy](http://deveiate.org/code/pg/PG/Connection.html#method-i-is_busy) and
 [PGConn#consume_input](http://deveiate.org/code/pg/PG/Connection.html#method-i-consume_input) methods.
-Depending on the size of queried results and the concurrency level, the gain in overall speed and
-responsiveness of your application might be actually quite huge. I've done some
-{file:BENCHMARKS.md BENCHMARKING} already.
+Depending on the size of queried results and the concurrency level, the gain
+in overall speed and responsiveness of your application might be actually quite huge.
+See {file:BENCHMARKS.md BENCHMARKING}.
 
 Thanks
 ------
