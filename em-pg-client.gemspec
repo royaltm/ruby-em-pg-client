@@ -4,7 +4,7 @@ require 'pg/em-version'
 Gem::Specification.new do |s|
   s.name = "em-pg-client"
   s.version = PG::EM::VERSION
-  s.required_ruby_version = ">= 1.9.1"
+  s.required_ruby_version = ">= 1.9.2"
   s.date = "#{Time.now.strftime("%Y-%m-%d")}"
   s.summary = "EventMachine PostgreSQL client"
   s.email = "rafal@yeondir.com"

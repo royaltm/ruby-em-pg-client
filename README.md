@@ -71,7 +71,7 @@ Features
 Requirements
 ------------
 
-* ruby >= 1.9 (tested: 2.1.0, 2.0.0-p353, 1.9.3-p374, 1.9.2-p320, 1.9.1-p378)
+* ruby >= 1.9.2 (tested: 2.1.0, 2.0.0-p353, 1.9.3-p374, 1.9.2-p320)
 * https://bitbucket.org/ged/ruby-pg >= 0.17.0
 * [PostgreSQL](http://www.postgresql.org/ftp/source/) RDBMS >= 8.3
 * http://rubyeventmachine.com >= 1.0.0
