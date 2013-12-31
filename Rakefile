@@ -13,7 +13,7 @@ task :test => :'test:safe'
 
 namespace :test do
   env_common = {'PGDATABASE' => 'test'}
-  env_unix_socket = env_common.merge('PGHOST' => '/tmp')
+  env_unix_socket = env_common.merge('PGHOST' => ENV['PGHOST_UNIX'] || '/tmp')
   env_tcpip = env_common.merge('PGHOST' => 'localhost')
 
   task :warn do
@@ -42,7 +42,9 @@ namespace :test do
 
   desc "Run unsafe tests only"
   task :unsafe => :warn do
-    raise "Set PGDATA environment variable before running the autoreconnect tests." unless ENV['PGDATA']
+    unless ENV['PGDATA'] || (ENV['PG_CTL_STOP_CMD'] && ENV['PG_CTL_START_CMD'])
+      raise "Set PGDATA environment variable before running the autoreconnect tests."
+    end
     %w[
       spec/em_client_autoreconnect.rb
       spec/em_synchrony_client_autoreconnect.rb

@@ -256,14 +256,14 @@ describe PG::EM::Client do
 
   it "should not expire after executing erraneous query" do
     @client.query_timeout.should eq 0
-    @client.query_timeout = 0.1
-    @client.query_timeout.should eq 0.1
+    @client.query_timeout = 1
+    @client.query_timeout.should eq 1
     expect {
       @client.query('SELLECT 1')
     }.to raise_error(PG::SyntaxError, /syntax error/)
     @client.async_command_aborted.should be_false
     @client.status.should be PG::CONNECTION_OK
-    ::EM::Synchrony.sleep 0.11
+    ::EM::Synchrony.sleep 1.5
     @client.async_command_aborted.should be_false
     @client.status.should be PG::CONNECTION_OK
   end

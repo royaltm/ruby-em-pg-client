@@ -47,7 +47,7 @@ describe 'connect failure and finished? status' do
   end
 
   describe 'with unix socket' do
-    let(:options)  { {host: '/tmp', port: bogus_port} }
+    let(:options)  { {host: ENV['PGHOST_UNIX'] || '/tmp', port: bogus_port} }
     include_context 'test deferred'
     include_context 'test blocking'
   end unless RSpec.windows_os?

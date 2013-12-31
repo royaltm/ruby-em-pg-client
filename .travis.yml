@@ -1,0 +1,31 @@
+language: ruby
+rvm:
+  - 1.9.2
+  - 1.9.3
+  - 2.0.0
+env:
+  - PGVERSION=9.3 PGBUILD=9.3.2-1-linux-x64
+  - PGVERSION=9.0 PGBUILD=9.0.15-1-linux-x64
+  - PGVERSION=8.4 PGBUILD=8.4.19-1-linux-x64
+before_install:
+  - sudo /etc/init.d/postgresql stop
+  - export PGPREFIX=/opt/PostgreSQL/$PGVERSION
+  - export PGDATA=$PGPREFIX/data
+  - export PATH="$PGPREFIX/bin:$PATH"
+  - wget http://get.enterprisedb.com/postgresql/postgresql-$PGBUILD.run
+  - chmod +x postgresql-$PGBUILD.run
+  - sudo ./postgresql-$PGBUILD.run --mode unattended --unattendedmodeui minimal --prefix
+    $PGPREFIX --datadir $PGDATA;
+  - sudo sed s/md5\$/trust/g $PGDATA/pg_hba.conf >/tmp/pg_hba.conf.$$
+  - sudo mv /tmp/pg_hba.conf.$$ $PGDATA/pg_hba.conf
+  - sudo -i -u postgres $PGPREFIX/bin/pg_ctl -D $PGDATA reload
+  - PGHOST_UNIX=`netstat -l --protocol=unix|grep PGSQL|awk '{print $NF}'`
+  - export PGHOST_UNIX="`dirname $PGHOST_UNIX`"
+  - test -n "$PGHOST_UNIX"
+  - export PG_CTL_STOP_CMD="sudo -i -u postgres $PGPREFIX/bin/pg_ctl -D $PGDATA stop
+    -s -m fast"
+  - export PG_CTL_START_CMD="sudo -i -u postgres $PGPREFIX/bin/pg_ctl -D $PGDATA start
+    -s -w"
+  - export PGUSER=postgres
+  - psql -c 'create database test;' -h "$PGHOST_UNIX"
+script: rake test:all

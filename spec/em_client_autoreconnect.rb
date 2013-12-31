@@ -5,8 +5,8 @@ require 'date'
 require 'eventmachine'
 require 'pg/em'
 
-$pgserver_cmd_stop = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" stop -s -m fast]
-$pgserver_cmd_start = %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" start -s -w]
+$pgserver_cmd_stop = ENV['PG_CTL_STOP_CMD'] || %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" stop -s -m fast]
+$pgserver_cmd_start = ENV['PG_CTL_START_CMD'] || %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" start -s -w]
 
 shared_context 'pg-em common' do
   around(:each) do |testcase|
