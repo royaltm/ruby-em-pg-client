@@ -45,19 +45,19 @@ namespace :test do
   task :fiber => [:fiber_inet, :fiber_unix]
 
   task :async_inet do
-    sh env_inet.merge('COVNAME'=>'async:inet'), "rspec spec/em_client_autoreconnect.rb"
+    sh env_inet.merge('COVNAME'=>'async:inet'), "rspec spec/em_client.rb"
   end
 
   task :async_unix do
-    sh env_unix.merge('COVNAME'=>'async:unix'), "rspec spec/em_client_autoreconnect.rb" unless windows_os?
+    sh env_unix.merge('COVNAME'=>'async:unix'), "rspec spec/em_client.rb" unless windows_os?
   end
 
   task :fiber_inet do
-    sh env_inet.merge('COVNAME'=>'fiber:inet'), "rspec spec/em_synchrony_client_autoreconnect.rb"
+    sh env_inet.merge('COVNAME'=>'fiber:inet'), "rspec spec/em_synchrony_client.rb"
   end
 
   task :fiber_unix do
-    sh env_unix.merge('COVNAME'=>'fiber:unix'), "rspec spec/em_synchrony_client_autoreconnect.rb" unless windows_os?
+    sh env_unix.merge('COVNAME'=>'fiber:unix'), "rspec spec/em_synchrony_client.rb" unless windows_os?
   end
 
   task :pgdata_check do
