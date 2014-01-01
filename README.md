@@ -1,15 +1,19 @@
-em-pg-client
-============
+#em-pg-client
 
-Author: Rafał Michalski  (rafal at yeondir dot com)
+The Ruby EventMachine driver interface to the PostgreSQL RDBMS. It is based on
+[ruby-pg](https://bitbucket.org/ged/ruby-pg).
+
+[![Gem Version][GV img]][Gem Version]
+[![Dependency Status][DS img]][Dependency Status]
+[![Coverage Status][CS img]][Coverage Status]
+[![Build Status][BS img]][Build Status]
+
+Author: Rafał Michalski (rafal at yeondir dot com)
 
 * http://github.com/royaltm/ruby-em-pg-client
 
 Description
 -----------
-
-__em-pg-client__ is the Ruby EventMachine driver interface to the
-PostgreSQL RDBMS. It is based on [ruby-pg](https://bitbucket.org/ged/ruby-pg).
 
 __em-pg-client__ provides {PG::EM::Client} class which inherits
 [PG::Connection](http://deveiate.org/code/pg/PG/Connection.html).
@@ -82,7 +86,7 @@ Requirements
 Install
 -------
 
-```
+```sh
   $ [sudo] gem install em-pg-client
 ```
 
@@ -390,3 +394,14 @@ The greetz go to:
   [em-pg-sequel](https://github.com/fl00r/em-pg-sequel)
 * Andrew Rudenko [prepor](https://github.com/prepor) for the implicit idea
   of the re-usable watcher from his [em-pg](https://github.com/prepor/em-pg).
+
+
+[Gem Version]: https://rubygems.org/gems/em-pg-client
+[Dependency Status]: https://gemnasium.com/royaltm/ruby-em-pg-client
+[Coverage Status]: https://coveralls.io/r/royaltm/ruby-em-pg-client
+[Build Status]: https://travis-ci.org/royaltm/ruby-em-pg-client
+
+[GV img]: https://badge.fury.io/rb/em-pg-client.png
+[DS img]: https://gemnasium.com/royaltm/ruby-em-pg-client.png
+[CS img]: https://coveralls.io/repos/royaltm/ruby-em-pg-client/badge.png
+[BS img]: https://travis-ci.org/royaltm/ruby-em-pg-client.png
