@@ -395,13 +395,16 @@ The greetz go to:
 * Andrew Rudenko [prepor](https://github.com/prepor) for the implicit idea
   of the re-usable watcher from his [em-pg](https://github.com/prepor/em-pg).
 
+[![Bitdeli Badge][BB img]][Bitdeli Badge]
 
 [Gem Version]: https://rubygems.org/gems/em-pg-client
 [Dependency Status]: https://gemnasium.com/royaltm/ruby-em-pg-client
 [Coverage Status]: https://coveralls.io/r/royaltm/ruby-em-pg-client
 [Build Status]: https://travis-ci.org/royaltm/ruby-em-pg-client
+[Bitdeli Badge]: https://bitdeli.com/free
 
 [GV img]: https://badge.fury.io/rb/em-pg-client.png
 [DS img]: https://gemnasium.com/royaltm/ruby-em-pg-client.png
 [CS img]: https://coveralls.io/repos/royaltm/ruby-em-pg-client/badge.png
 [BS img]: https://travis-ci.org/royaltm/ruby-em-pg-client.png
+[BB img]: https://d2weczhvl823v0.cloudfront.net/royaltm/ruby-em-pg-client/trend.png
