@@ -593,8 +593,14 @@ module PG
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_result PG::Connection#get_result
       #
       def get_result_defer(&blk)
-        df = PG::EM::FeaturedDeferrable.new(&blk)
-        setup_emio_watcher(df).set_single_result_mode
+        begin
+          df = PG::EM::FeaturedDeferrable.new(&blk)
+          setup_emio_watcher(df).set_single_result_mode
+        rescue PG::Error => e
+          ::EM.next_tick { async_autoreconnect!(df, e) }
+        rescue Exception => e
+          ::EM.next_tick { df.fail(e) }
+        end
         df
       end
 
@@ -612,19 +618,31 @@ module PG
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_last_result PG::Connection#get_last_result
       #
       def get_last_result_defer(&blk)
-        df = PG::EM::FeaturedDeferrable.new(&blk)
-        setup_emio_watcher(df)
+        begin
+          df = PG::EM::FeaturedDeferrable.new(&blk)
+          setup_emio_watcher(df)
+        rescue PG::Error => e
+          ::EM.next_tick { async_autoreconnect!(df, e) }
+        rescue Exception => e
+          ::EM.next_tick { df.fail(e) }
+        end
         df
       end
 
       private
 
       def setup_emio_watcher(df, send_proc=nil)
-        if @watcher && @watcher.watching?
-          @watcher.watch_results(df, send_proc)
+        if status == PG::CONNECTION_BAD
+          error = ConnectionBad.new(error_message)
+          error.instance_variable_set(:@connection, self)
+          raise error
         else
-          @watcher = ::EM.watch(self.socket_io, Watcher, self).
-                        watch_results(df, send_proc)
+          if @watcher && @watcher.watching?
+            @watcher.watch_results(df, send_proc)
+          else
+            @watcher = ::EM.watch(self.socket_io, Watcher, self).
+                          watch_results(df, send_proc)
+          end
         end
       end
 
