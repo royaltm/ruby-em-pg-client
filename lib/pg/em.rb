@@ -486,9 +486,9 @@ module PG
 
       # @!macro deferrable_api
       #   @return [FeaturedDeferrable]
-      #   Use the returned deferrable's +callback+ and +errback+ method to get the result.
-      #   If the block is provided it's bound to both the +callback+ and +errback+ hooks
-      #   of the returned deferrable.
+      #   Use the returned Deferrable's +callback+ and +errback+ methods to
+      #   get the result. If the block is provided it's bound to both the
+      #   +callback+ and +errback+ hooks of the returned deferrable.
 
       # @!macro deferrable_query_api
       #   @yieldparam result [PG::Result|Error] command result on success or a PG::Error instance on error.
@@ -507,7 +507,7 @@ module PG
       #
       # @!method prepare_defer(stmt_name, sql, param_types=nil, &blk)
       #   Prepares statement +sql+ with name +stmt_name+ to be executed later asynchronously,
-      #   and immediately returns with deferrable.
+      #   and immediately returns with a Deferrable.
       #
       #   @macro deferrable_query_api
       #
@@ -515,7 +515,7 @@ module PG
       #
       # @!method exec_prepared_defer(statement_name, params=nil, result_format=nil, &blk)
       #   Execute prepared named statement specified by +statement_name+ asynchronously,
-      #   and immediately returns with deferrable.
+      #   and immediately returns with a Deferrable.
       #
       #   @macro deferrable_query_api
       #
@@ -524,7 +524,7 @@ module PG
       #
       # @!method describe_prepared_defer(statement_name, &blk)
       #   Asynchronously sends command to retrieve information about the prepared statement +statement_name+,
-      #   and immediately returns with deferrable.
+      #   and immediately returns with a Deferrable.
       #
       #   @macro deferrable_query_api
       #
@@ -532,7 +532,7 @@ module PG
       #
       # @!method describe_portal_defer(portal_name, &blk)
       #   Asynchronously sends command to retrieve information about the portal +portal_name+,
-      #   and immediately returns with deferrable.
+      #   and immediately returns with a Deferrable.
       #
       #   @macro deferrable_query_api
       #
@@ -581,7 +581,9 @@ module PG
 
       # Asynchronously retrieves the next result from a call to
       # #send_query (or another asynchronous command) and immediately
-      # returns with deferrable.
+      # returns with a Deferrable.
+      # It then receives the result object on :succeed, or +nil+
+      # if no results are available.
       #
       # @macro deferrable_api
       # @yieldparam result [PG::Result|Error|nil] command result on success or a PG::Error instance on error
@@ -598,7 +600,9 @@ module PG
 
       # Asynchronously retrieves all available results on the current
       # connection (from previously issued asynchronous commands like
-      # +send_query()+) and immediately returns with deferrable.
+      # +send_query()+) and immediately returns with a Deferrable.
+      # It then receives the last non-NULL result on :succeed, or +nil+
+      # if no results are available.
       #
       # @macro deferrable_api
       # @yieldparam result [PG::Result|Error|nil] command result on success or a PG::Error instance on error
@@ -627,17 +631,17 @@ module PG
       public
 
       # @!macro auto_synchrony_api
-      #   Performs command asynchronously yielding current fiber
-      #   if EventMachine reactor is running and the current fiber isn't the
-      #   root fiber. Other fibers can process while waiting for the server
+      #   If EventMachine reactor is running and the current fiber isn't the
+      #   root fiber this method performs command asynchronously yielding
+      #   current fiber. Other fibers can process while waiting for the server
       #   to complete the request.
       #
-      #   Otherwise performs a blocking call to parent method.
+      #   Otherwise performs a blocking call to a parent method.
       #
       #   @yieldparam result [PG::Result] command result on success
+      #   @raise [PG::Error]
       #   @return [PG::Result] if block wasn't given
       #   @return [Object] result of the given block
-      #   @raise [PG::Error]
 
       # @!group Auto-sensing thread or fiber blocking command methods
 
@@ -666,7 +670,7 @@ module PG
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-prepare PG::Connection#prepare
       #
       # @!method exec_prepared(statement_name, params=nil, result_format=nil, &blk)
-      #   Execute prepared named statement specified by +statement_name+.
+      #   Executes prepared named statement specified by +statement_name+.
       #
       #   @macro auto_synchrony_api
       #
@@ -674,7 +678,7 @@ module PG
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_prepared PG::Connection#exec_prepared
       #
       # @!method describe_prepared(statement_name, &blk)
-      #   Retrieve information about the prepared statement +statement_name+,
+      #   Retrieves information about the prepared statement +statement_name+,
       #
       #   @macro auto_synchrony_api
       #
@@ -682,13 +686,35 @@ module PG
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_prepared PG::Connection#describe_prepared
       #
       # @!method describe_portal(portal_name, &blk)
-      #   Retrieve information about the portal +portal_name+,
+      #   Retrieves information about the portal +portal_name+,
       #
       #   @macro auto_synchrony_api
       #
       #   @see PG::EM::Client#describe_portal_defer
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_portal PG::Connection#describe_portal
       #
+      # @!method get_result(&blk)
+      #   Retrieves the next result from a call to #send_query (or another
+      #   asynchronous command). If no more results are available returns
+      #   +nil+ and the block (if given) is never called.
+      #
+      #   @macro auto_synchrony_api
+      #   @return [nil] if no more results
+      #
+      #   @see #get_result_defer
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_result PG::Connection#get_result
+      #
+      # @!method get_last_result
+      #   Retrieves all available results on the current connection
+      #   (from previously issued asynchronous commands like +send_query()+)
+      #   and returns the last non-NULL result, or +nil+ if no results are
+      #   available.
+      #
+      #   @macro auto_synchrony_api
+      #   @return [nil] if no more results
+      #
+      #   @see #get_last_result_defer
+      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_last_result PG::Connection#get_last_result
       %w(
         exec              exec_defer
         exec_params       exec_defer
