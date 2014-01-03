@@ -175,6 +175,21 @@ module PG
       # Used internally for marking connection as aborted on query timeout.
       attr_accessor :async_command_aborted
 
+      # Returns +true+ if +pg+ supports single row mode or +false+ otherwise.
+      # Single row mode is available since +libpq+ 9.2.
+      # @return [Boolean]
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-set_single_row_mode PG::Connection#set_single_row_mode
+      def self.single_row_mode?
+        method_defined? :set_single_row_mode
+      end
+
+      # Returns +true+ if +pg+ supports single row mode or +false+ otherwise.
+      # @return [Boolean]
+      # @see single_row_mode?
+      def single_row_mode?
+        self.class.single_row_mode?
+      end
+
       # environment variable name for connect_timeout fallback value
       @@connect_timeout_envvar = conndefaults.find{|d| d[:keyword] == "connect_timeout" }[:envvar]
 
@@ -267,6 +282,7 @@ module PG
       # after successfull reset.
       # If the block is provided it's bound to +callback+ and +errback+ hooks
       # of the returned deferrable.
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
       def reset_defer(&blk)
         @async_command_aborted = false
         df = PG::EM::FeaturedDeferrable.new(&blk)
@@ -302,7 +318,7 @@ module PG
       # Otherwise performs a thread-blocking call to the parent method.
       #
       # @raise [PG::Error]
-      #
+      # @see #reset_defer
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
       def reset
         @async_command_aborted = false

@@ -113,6 +113,32 @@ describe PG::EM::Client do
     ).should be_an_instance_of PG::Result
   end
 
+  if described_class.single_row_mode?
+
+    it "should get each result in single row mode" do
+      @client.send_query('SELECT data, id FROM foo order by id')
+      @client.set_single_row_mode
+      @values.each do |data, id|
+        result = @client.get_result
+        result.should be_an_instance_of PG::Result
+        result.result_status.should eq PG::PGRES_SINGLE_TUPLE
+        result.check
+        value = result.to_a
+        result.clear
+        value.should eq [{'data' => data, 'id' => id.to_s}]
+      end
+      result = @client.get_result
+      result.should be_an_instance_of PG::Result
+      result.check
+      result.result_status.should eq PG::PGRES_TUPLES_OK
+      result.to_a.should eq []
+      result.clear
+      @client.get_result.should be_nil
+      EM.stop
+    end
+
+  end
+
   it "should connect to database asynchronously" do
     this = :first
     Encoding.default_internal = Encoding::ISO_8859_1

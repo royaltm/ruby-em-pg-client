@@ -106,7 +106,7 @@ end
 
 shared_context 'em-pg common after' do
 
-  if described_class.instance_methods.include? :set_single_row_mode
+  if described_class.single_row_mode?
 
     it "should get each result in single row mode" do
       @client.get_result_defer do |result|

@@ -61,6 +61,36 @@ describe 'em-synchrony-pg default autoreconnect' do
     @tested_proc.call
   end
 
+  it "should fail to get last result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    expect do
+      @client.get_last_result
+    end.to raise_error PG::ConnectionBad
+    @client.status.should be PG::CONNECTION_OK
+    @client.get_last_result.should be_nil
+    EM.stop
+  end
+
+  it "should fail to get each result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    result = @client.get_result
+    result.should be_an_instance_of PG::Result
+    expect do
+      result.check
+    end.to raise_error PG::Error
+    @client.status.should be PG::CONNECTION_OK
+    expect do
+      @client.get_result
+    end.to raise_error PG::ConnectionBad
+    @client.status.should be PG::CONNECTION_OK
+    @client.get_result.should be_nil
+    EM.stop
+  end
+
   before(:all) do
     @tested_proc = proc do
       @client.query('SELECT pg_database_size(current_database());') do |result|
@@ -102,6 +132,40 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
     @tested_proc.call
   end
 
+  it "should fail to get last result asynchronously after server restart" do
+    @client.on_autoreconnect = proc {
+      EM::DefaultDeferrable.new.tap {|df| df.succeed }
+    }
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    expect do
+      @client.get_last_result
+    end.to raise_error PG::ConnectionBad
+    @client.status.should be PG::CONNECTION_OK
+    @client.get_last_result.should be_nil
+    EM.stop
+  end
+
+  it "should fail to get each result asynchronously after server restart" do
+    @client.on_autoreconnect = proc { true }
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    result = @client.get_result
+    result.should be_an_instance_of PG::Result
+    expect do
+      result.check
+    end.to raise_error PG::Error
+    @client.status.should be PG::CONNECTION_OK
+    expect do
+      @client.get_result
+    end.to raise_error PG::ConnectionBad
+    @client.status.should be PG::CONNECTION_OK
+    @client.get_result.should be_nil
+    EM.stop
+  end
+
   before(:all) do
     @tested_proc = proc do
       @client.exec_prepared('get_db_size') do |result|
@@ -139,6 +203,43 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     @client.reset
     @client.status.should be PG::CONNECTION_OK
     @tested_proc.call
+  end
+
+  it "should fail to get last result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    expect do
+      @client.get_last_result
+    end.to raise_error PG::ConnectionBad
+    @client.status.should be PG::CONNECTION_BAD
+    expect do
+      @client.get_last_result
+    end.to raise_error PG::ConnectionBad
+    @client.reset
+    @client.status.should be PG::CONNECTION_OK
+    @client.get_last_result.should be_nil
+    EM.stop
+  end
+
+  it "should fail to get each result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    result = @client.get_result
+    result.should be_an_instance_of PG::Result
+    expect do
+      result.check
+    end.to raise_error PG::Error
+    @client.status.should be PG::CONNECTION_OK
+    expect do
+      @client.get_result
+    end.to raise_error PG::ConnectionBad
+    @client.status.should be PG::CONNECTION_BAD
+    @client.reset
+    @client.status.should be PG::CONNECTION_OK
+    @client.get_result.should be_nil
+    EM.stop
   end
 
   before(:all) do
