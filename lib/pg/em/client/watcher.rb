@@ -76,7 +76,7 @@ module PG
           end
         end
 
-        # Carefully extract the last result without
+        # Carefully extract results without
         # blocking the EventMachine reactor.
         def fetch_results
           result = false
