@@ -106,6 +106,42 @@ end
 
 shared_context 'em-pg common after' do
 
+  if described_class.instance_methods.include? :set_single_row_mode
+
+    it "should get each result in single row mode" do
+      @client.get_result_defer do |result|
+        result.should be_nil
+        @client.send_query('SELECT data, id FROM foo order by id')
+        @client.set_single_row_mode
+        EM::Iterator.new(@values, 1).map(proc{ |(data, id), iter|
+          @client.get_result_defer do |result|
+            result.should be_an_instance_of PG::Result
+            result.check
+            result.result_status.should eq PG::PGRES_SINGLE_TUPLE
+            value = result.to_a
+            value.should eq [{'data' => data, 'id' => id.to_s}]
+            result.clear
+            iter.return value
+          end.should be_a_kind_of ::EM::DefaultDeferrable
+        }, proc{ |results|
+          results.length.should eq @values.length
+          @client.get_result_defer do |result|
+            result.should be_an_instance_of PG::Result
+            result.check
+            result.result_status.should eq PG::PGRES_TUPLES_OK
+            result.to_a.should eq []
+            result.clear
+            @client.get_result_defer do |result|
+              result.should be_nil
+              EM.stop
+            end.should be_a_kind_of ::EM::DefaultDeferrable
+          end.should be_a_kind_of ::EM::DefaultDeferrable
+        })
+      end.should be_a_kind_of ::EM::DefaultDeferrable
+    end
+
+  end
+
   it_should_execute("create prepared statement",
       :prepare_defer, 'get_foo', 'SELECT * FROM foo order by id')
 
@@ -282,4 +318,44 @@ shared_context 'em-pg common after' do
       end
     end
   end
+
+  it "should get last result asynchronously" do
+    @client.get_last_result_defer do |result|
+      result.should be_nil
+      @client.send_query('SELECT 1; SELECT 2; SELECT 3')
+      @client.get_last_result_defer do |result|
+        result.should be_an_instance_of PG::Result
+        result.getvalue(0,0).should eq '3'
+        result.clear
+        @client.get_last_result_defer do |result|
+          result.should be_nil
+          EM.stop
+        end
+      end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should get each result asynchronously" do
+    @client.get_result_defer do |result|
+      result.should be_nil
+      @client.send_query('SELECT 4; SELECT 5; SELECT 6')
+      EM::Iterator.new(%w[4 5 6], 1).map(proc{ |value, iter|
+        @client.get_result_defer do |result|
+          result.should be_an_instance_of PG::Result
+          result.check
+          result.result_status.should eq PG::PGRES_TUPLES_OK
+          result.getvalue(0,0).should eq value
+          result.clear
+          iter.return value
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      }, proc{ |results|
+        results.should eq %w[4 5 6]
+        @client.get_result_defer do |result|
+          result.should be_nil
+          EM.stop
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      })
+    end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
 end

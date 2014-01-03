@@ -209,6 +209,80 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
 
+  it "should fail to get last result asynchronously after server restart" do
+    @client.on_autoreconnect = proc { true }
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.get_last_result_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_OK
+      @client.get_last_result_defer do |result|
+        result.should be_nil
+        EM.stop
+      end
+    end.should be_a_kind_of EM::DefaultDeferrable
+  end
+
+  it "should fail to get each result asynchronously after server restart" do
+    @client.on_autoreconnect = proc {
+      EM::DefaultDeferrable.new.tap {|df| df.succeed }
+    }
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.get_result_defer do |result|
+      result.should be_an_instance_of PG::Result
+      expect do
+        result.check
+      end.to raise_error PG::Error
+      @client.status.should be PG::CONNECTION_OK
+      @client.get_result_defer do |ex|
+        ex.should be_an_instance_of PG::ConnectionBad
+        @client.status.should be PG::CONNECTION_OK
+        @client.get_result_defer do |result|
+          result.should be_nil
+          EM.stop
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of EM::DefaultDeferrable
+    end
+  end
+
+  it "should fail to get last result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.get_last_result_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_OK
+      @client.get_last_result_defer do |result|
+        result.should be_nil
+        EM.stop
+      end
+    end.should be_a_kind_of EM::DefaultDeferrable
+  end
+
+  it "should fail to get each result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.get_result_defer do |result|
+      result.should be_an_instance_of PG::Result
+      expect do
+        result.check
+      end.to raise_error PG::Error
+      @client.status.should be PG::CONNECTION_OK
+      @client.get_result_defer do |ex|
+        ex.should be_an_instance_of PG::ConnectionBad
+        @client.status.should be PG::CONNECTION_OK
+        @client.get_result_defer do |result|
+          result.should be_nil
+          EM.stop
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of EM::DefaultDeferrable
+    end
+  end
+
   before(:all) do
     @tested_proc = proc do
       @client.exec_prepared_defer('get_db_size') do |result|
@@ -247,11 +321,51 @@ describe 'pg-em with autoreconnect disabled' do
 
   it "should get database size using query after async manual connection reset" do
     @client.status.should be PG::CONNECTION_BAD
-    @client.async_reset do |conn|
+    @client.reset_defer do |conn|
       conn.should be @client
       @client.status.should be PG::CONNECTION_OK
       @tested_proc.call
     end.should be_a_kind_of ::EM::DefaultDeferrable
+  end
+
+  it "should fail to get last result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.get_last_result_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_BAD
+      @client.get_last_result_defer do |ex|
+        ex.should be_an_instance_of PG::ConnectionBad
+        @client.reset_defer do |conn|
+          conn.should be @client
+          @client.status.should be PG::CONNECTION_OK
+          EM.stop
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      end
+    end.should be_a_kind_of EM::DefaultDeferrable
+  end
+
+  it "should fail to get each result asynchronously after server restart" do
+    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @client.get_result_defer do |result|
+      result.should be_an_instance_of PG::Result
+      expect do
+        result.check
+      end.to raise_error PG::Error
+      @client.status.should be PG::CONNECTION_OK
+      @client.get_result_defer do |ex|
+        ex.should be_an_instance_of PG::ConnectionBad
+        @client.status.should be PG::CONNECTION_BAD
+        @client.reset_defer do |conn|
+          conn.should be @client
+          @client.status.should be PG::CONNECTION_OK
+          EM.stop
+        end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of EM::DefaultDeferrable
+    end
   end
 
   before(:all) do

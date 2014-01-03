@@ -17,17 +17,37 @@ module PG
           @is_connected
         end
 
-        def watch_query(deferrable, send_proc)
-          self.notify_readable = true
+        def one_result_mode?
+          @one_result_mode
+        end
+
+        def set_single_result_mode
+          @one_result_mode = true
+          @send_proc = nil
+        end
+
+        def watch_results(deferrable, send_proc=nil)
+          @one_result_mode = false
           @last_result = nil
           @deferrable = deferrable
           @send_proc = send_proc
-          @timer.cancel if @timer
-          if (timeout = @client.query_timeout) > 0
-            @notify_timestamp = Time.now
-            setup_timer timeout
+          cancel_timer
+          if @client.is_busy
+            if @client.status == PG::CONNECTION_OK
+              self.notify_readable = true
+              if (timeout = @client.query_timeout) > 0
+                @notify_timestamp = Time.now
+                setup_timer timeout
+              end
+            else
+              @deferrable.protect do
+                error = ConnectionBad.new(@client.error_message)
+                error.instance_variable_set(:@connection, self)
+                raise error
+              end
+            end
           else
-            @timer = nil
+            ::EM.next_tick { fetch_results }
           end
           self
         end
@@ -58,18 +78,18 @@ module PG
 
         # Carefully extract the last result without
         # blocking the EventMachine reactor.
-        def notify_readable
+        def fetch_results
           result = false
           @client.consume_input
           until @client.is_busy
-            if (single_result = @client.get_result).nil?
-              if (result = @last_result).nil?
-                error = Error.new(@client.error_message)
-                error.instance_variable_set(:@connection, @client)
-                raise error
+            single_result = @client.get_result
+            if one_result_mode?
+              result = single_result
+              break
+            elsif single_result.nil?
+              if result = @last_result
+                result.check
               end
-              result.check
-              cancel_timer
               break
             end
             @last_result.clear if @last_result
@@ -78,8 +98,10 @@ module PG
         rescue Exception => e
           self.notify_readable = false
           cancel_timer
+          send_proc = @send_proc
+          @send_proc = nil
           if e.is_a?(PG::Error)
-            @client.async_autoreconnect!(@deferrable, e, &@send_proc)
+            @client.async_autoreconnect!(@deferrable, e, &send_proc)
           else
             @deferrable.fail(e)
           end
@@ -88,9 +110,13 @@ module PG
             @notify_timestamp = Time.now if @timer
           else
             self.notify_readable = false
+            cancel_timer
+            @send_proc = nil
             @deferrable.succeed(result)
           end
         end
+
+        alias_method :notify_readable, :fetch_results
 
         def unbind
           @is_connected = false

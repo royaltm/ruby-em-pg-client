@@ -268,6 +268,47 @@ describe PG::EM::Client do
     @client.status.should be PG::CONNECTION_OK
   end
 
+  it "should get last result asynchronously" do
+    result = @client.get_last_result
+    result.should be_nil
+    @client.get_last_result.should be_nil
+    @client.send_query('SELECT 1; SELECT 2; SELECT 3')
+    asynchronous = false
+    EM.next_tick { asynchronous = true }
+    result = @client.get_last_result
+    result.should be_an_instance_of PG::Result
+    result.getvalue(0,0).should eq '3'
+    result.clear
+    @client.get_last_result.should be_nil
+    asynchronous.should be true
+  end
+
+  it "should get each result asynchronously" do
+    result = @client.get_result
+    result.should be_nil
+    @client.get_result do |result|
+      result.should be_nil
+    end.should be_nil
+    @client.send_query('SELECT 4; SELECT 5; SELECT 6')
+    asynchronous = false
+    EM.next_tick { asynchronous = true }
+    %w[4 5 6].map do |value|
+      result = @client.get_result do |result|
+        result.should be_an_instance_of PG::Result
+        result.check
+        result.result_status.should eq PG::PGRES_TUPLES_OK
+        result.getvalue(0,0).should eq value
+        result
+      end
+      expect do
+        result.clear
+      end.to raise_error PG::Error, /cleared/
+      value
+    end.should eq %w[4 5 6]
+    @client.get_result.should be_nil
+    asynchronous.should be true
+  end
+
   describe 'PG::EM::Client#transaction' do
 
     it "should raise ArgumentError when there is no block" do

@@ -431,7 +431,7 @@ module PG
                 if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
                   # the handler returned a deferrable
                   returned_df.callback do
-                    if was_in_transaction
+                    if was_in_transaction || !send_proc
                       # there was a transaction in progress, fail anyway
                       deferrable.fail error
                     else
@@ -444,7 +444,7 @@ module PG
                 elsif returned_df.is_a?(Exception)
                   # tha handler returned an exception object, so fail with it
                   deferrable.fail returned_df
-                elsif returned_df == false || (was_in_transaction && returned_df != true)
+                elsif returned_df == false || !send_proc || (was_in_transaction && returned_df != true)
                   # tha handler returned false or raised an exception
                   # or there was an active transaction and handler didn't return true
                   deferrable.fail error
@@ -453,7 +453,7 @@ module PG
                   deferrable.protect(&send_proc)
                 end
               end.resume
-            elsif was_in_transaction
+            elsif was_in_transaction || !send_proc
               # there was a transaction in progress, fail anyway
               deferrable.fail error
             else
@@ -469,11 +469,14 @@ module PG
       end
 
       # @!macro deferrable_api
-      #   @yieldparam result [PG::Result|Error] command result on success or a PG::Error instance on error.
       #   @return [FeaturedDeferrable]
       #   Use the returned deferrable's +callback+ and +errback+ method to get the result.
       #   If the block is provided it's bound to both the +callback+ and +errback+ hooks
       #   of the returned deferrable.
+
+      # @!macro deferrable_query_api
+      #   @yieldparam result [PG::Result|Error] command result on success or a PG::Error instance on error.
+      #   @macro deferrable_api
 
       # @!group Deferrable command methods
 
@@ -481,7 +484,7 @@ module PG
       #   Sends SQL query request specified by +sql+ to PostgreSQL for asynchronous processing,
       #   and immediately returns with +deferrable+.
       #
-      #   @macro deferrable_api
+      #   @macro deferrable_query_api
       #
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec PG::Connection#exec
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_params PG::Connection#exec_params
@@ -490,7 +493,7 @@ module PG
       #   Prepares statement +sql+ with name +stmt_name+ to be executed later asynchronously,
       #   and immediately returns with deferrable.
       #
-      #   @macro deferrable_api
+      #   @macro deferrable_query_api
       #
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-prepare PG::Connection#prepare
       #
@@ -498,7 +501,7 @@ module PG
       #   Execute prepared named statement specified by +statement_name+ asynchronously,
       #   and immediately returns with deferrable.
       #
-      #   @macro deferrable_api
+      #   @macro deferrable_query_api
       #
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_query_prepared PG::Connection#send_query_prepared
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-exec_prepared PG::Connection#send_exec_prepared
@@ -507,7 +510,7 @@ module PG
       #   Asynchronously sends command to retrieve information about the prepared statement +statement_name+,
       #   and immediately returns with deferrable.
       #
-      #   @macro deferrable_api
+      #   @macro deferrable_query_api
       #
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_prepared PG::Connection#describe_prepared
       #
@@ -515,7 +518,7 @@ module PG
       #   Asynchronously sends command to retrieve information about the portal +portal_name+,
       #   and immediately returns with deferrable.
       #
-      #   @macro deferrable_api
+      #   @macro deferrable_query_api
       #
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_portal PG::Connection#describe_portal
       #
@@ -532,12 +535,7 @@ module PG
           df = PG::EM::FeaturedDeferrable.new(&blk)
           send_proc = proc do
             #{send_name}(*args)
-            if @watcher && @watcher.watching?
-              @watcher.watch_query(df, send_proc)
-            else
-              @watcher = ::EM.watch(self.socket_io, Watcher, self).
-                            watch_query(df, send_proc)
-            end
+            setup_emio_watcher(df, send_proc)
           end
           begin
             if @async_command_aborted
@@ -564,6 +562,53 @@ module PG
       alias_method :exec_params_defer, :exec_defer
 
       # @!endgroup
+
+      # Asynchronously retrieves the next result from a call to
+      # #send_query (or another asynchronous command) and immediately
+      # returns with deferrable.
+      #
+      # @macro deferrable_api
+      # @yieldparam result [PG::Result|Error|nil] command result on success or a PG::Error instance on error
+      #                                             or +nil+ if no results are available.
+      #
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_query PG::Connection#send_query
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_result PG::Connection#get_result
+      #
+      def get_result_defer(&blk)
+        df = PG::EM::FeaturedDeferrable.new(&blk)
+        setup_emio_watcher(df).set_single_result_mode
+        df
+      end
+
+      # Asynchronously retrieves all available results on the current
+      # connection (from previously issued asynchronous commands like
+      # +send_query()+) and immediately returns with deferrable.
+      #
+      # @macro deferrable_api
+      # @yieldparam result [PG::Result|Error|nil] command result on success or a PG::Error instance on error
+      #                                             or +nil+ if no results are available.
+      #
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_query PG::Connection#send_query
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_last_result PG::Connection#get_last_result
+      #
+      def get_last_result_defer(&blk)
+        df = PG::EM::FeaturedDeferrable.new(&blk)
+        setup_emio_watcher(df)
+        df
+      end
+
+      private
+
+      def setup_emio_watcher(df, send_proc=nil)
+        if @watcher && @watcher.watching?
+          @watcher.watch_results(df, send_proc)
+        else
+          @watcher = ::EM.watch(self.socket_io, Watcher, self).
+                        watch_results(df, send_proc)
+        end
+      end
+
+      public
 
       # @!macro auto_synchrony_api
       #   Performs command asynchronously yielding current fiber
@@ -635,6 +680,8 @@ module PG
         prepare           prepare_defer
         describe_prepared describe_prepared_defer
         describe_portal   describe_portal_defer
+        get_result        get_result_defer
+        get_last_result   get_last_result_defer
         ).each_slice(2) do |name, defer_name|
 
         class_eval <<-EOD, __FILE__, __LINE__
@@ -646,7 +693,7 @@ module PG
 
               result = Fiber.yield
               raise result if result.is_a?(::Exception)
-              if block_given?
+              if block_given? && result
                 begin
                   yield result
                 ensure
