@@ -329,9 +329,12 @@ describe 'pg-em with autoreconnect disabled' do
   end
 
   it "should fail to get last result asynchronously after server restart" do
-    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
+    begin
+      @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    rescue PG::UnableToSend
+    end
     @client.get_last_result_defer do |ex|
       ex.should be_an_instance_of PG::ConnectionBad
       @client.status.should be PG::CONNECTION_BAD
