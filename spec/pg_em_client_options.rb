@@ -9,14 +9,18 @@ describe 'em-pg-client options' do
   subject                   { PG::EM::Client }
 
   let(:callback)            { proc {|c, e| false } }
-  let(:args)                { [{async_autoreconnect: true, connect_timeout: 10, host: 'foo'}] }
-  let(:str_key_args)        { [{'async_autoreconnect'=>true, 'connect_timeout'=>10, 'host'=>'foo'}] }
+  let(:args)                { [{
+     query_timeout: 1,   async_autoreconnect: true,   connect_timeout: 10,   host: 'foo'
+  }]}
+  let(:str_key_args)        { [{
+    'query_timeout'=>1, 'async_autoreconnect'=>true, 'connect_timeout'=>10, 'host'=>'foo'
+  }]}
   let(:pgconn_args)         { [{connect_timeout: 10, host: 'foo'}] }
   let(:str_key_pgconn_args) { [{'connect_timeout'=>10, 'host'=>'foo'}] }
   let(:async_options)       { {
                                 :@async_autoreconnect => true,
                                 :@connect_timeout => 10,
-                                :@query_timeout=>0,
+                                :@query_timeout=>1,
                                 :@on_autoreconnect=>nil,
                                 :@async_command_aborted=>false} }
 
@@ -80,6 +84,12 @@ describe 'em-pg-client options' do
     options = subject.parse_async_options [on_autoreconnect: callback]
     options.should be_an_instance_of Hash
     options[:@on_autoreconnect].should be callback
+  end
+
+  it "should raise error with obsolete argument" do
+    expect do
+      subject.parse_async_options [on_reconnect: true]
+    end.to raise_error ArgumentError
   end
 
 end

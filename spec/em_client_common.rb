@@ -109,6 +109,7 @@ shared_context 'em-pg common after' do
   if described_class.single_row_mode?
 
     it "should get each result in single row mode" do
+      @client.single_row_mode?.should be_true
       @client.get_result_defer do |result|
         result.should be_nil
         @client.send_query('SELECT data, id FROM foo order by id')

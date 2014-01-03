@@ -116,6 +116,7 @@ describe PG::EM::Client do
   if described_class.single_row_mode?
 
     it "should get each result in single row mode" do
+      @client.single_row_mode?.should be_true
       @client.send_query('SELECT data, id FROM foo order by id')
       @client.set_single_row_mode
       @values.each do |data, id|
@@ -175,12 +176,12 @@ describe PG::EM::Client do
     f = Fiber.current
     Fiber.new do
       begin
-        described_class.new do |conn|
-          this = :second
-          Encoding.default_internal = nil
-          conn.should be_an_instance_of described_class
-          conn.external_encoding.should be conn.internal_encoding
-        end
+        conn = described_class.new
+        this = :second
+        Encoding.default_internal = nil
+        conn.should be_an_instance_of described_class
+        conn.external_encoding.should be conn.internal_encoding
+        conn.finish
       ensure
         f.resume
       end
