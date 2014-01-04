@@ -424,7 +424,7 @@ module PG
       # Perform auto re-connect. Used internally.
       def async_autoreconnect!(deferrable, error, &send_proc)
         # reconnect only if connection is bad and flag is set
-        if self.status != PG::CONNECTION_OK && async_autoreconnect
+        if self.status == PG::CONNECTION_BAD && async_autoreconnect
           # check if transaction was active
           was_in_transaction = case @last_transaction_status
           when PG::PQTRANS_IDLE, PG::PQTRANS_UNKNOWN
