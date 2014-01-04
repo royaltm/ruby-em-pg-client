@@ -629,28 +629,33 @@ module PG
         df
       end
 
+      def raise_error(klass=PG::Error, message=error_message)
+        error = klass.new(message)
+        error.instance_variable_set(:@connection, self)
+        raise error
+      end
+
       private
 
       def check_async_command_aborted!
         if @async_command_aborted
-          error = ConnectionBad.new("previous query expired, need connection reset")
-          error.instance_variable_set(:@connection, self)
-          raise error
+          raise_error ConnectionBad, "previous query expired, need connection reset"
         end
       end
 
       def setup_emio_watcher(df, send_proc=nil)
-        if status == PG::CONNECTION_BAD
-          error = ConnectionBad.new(error_message)
-          error.instance_variable_set(:@connection, self)
-          raise error
-        else
+        case status
+        when PG::CONNECTION_BAD
+          raise_error ConnectionBad
+        when PG::CONNECTION_OK
           if @watcher && @watcher.watching?
             @watcher.watch_results(df, send_proc)
           else
             @watcher = ::EM.watch(self.socket_io, Watcher, self).
                           watch_results(df, send_proc)
           end
+        else
+          raise_error ConnectionBad, "connection reset pending"
         end
       end
 

@@ -41,9 +41,7 @@ module PG
               end
             else
               @deferrable.protect do
-                error = ConnectionBad.new(@client.error_message)
-                error.instance_variable_set(:@connection, self)
-                raise error
+                @client.raise_error ConnectionBad
               end
             end
           else
@@ -59,9 +57,7 @@ module PG
               self.notify_readable = false
               @client.async_command_aborted = true
               @deferrable.protect do
-                error = ConnectionBad.new("query timeout expired (async)")
-                error.instance_variable_set(:@connection, @client)
-                raise error
+                @client.raise_error ConnectionBad, "query timeout expired (async)"
               end
             else
               setup_timer timeout, last_interval
