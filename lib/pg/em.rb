@@ -601,6 +601,8 @@ module PG
         df
       end
 
+      alias_method :blocking_get_result, :get_result
+
       # Asynchronously retrieves all available results on the current
       # connection (from previously issued asynchronous commands like
       # +send_query()+) and immediately returns with a Deferrable.

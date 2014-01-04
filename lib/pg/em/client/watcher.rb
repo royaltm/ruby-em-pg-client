@@ -82,7 +82,7 @@ module PG
           result = false
           @client.consume_input
           until @client.is_busy
-            single_result = @client.get_result
+            single_result = @client.blocking_get_result
             if one_result_mode?
               result = single_result
               break
