@@ -554,11 +554,7 @@ module PG
             setup_emio_watcher(df, send_proc)
           end
           begin
-            if @async_command_aborted
-              error = ConnectionBad.new("previous query expired, need connection reset")
-              error.instance_variable_set(:@connection, self)
-              raise error
-            end
+            check_async_command_aborted!
             @last_transaction_status = transaction_status
             send_proc.call
           rescue PG::Error => e
@@ -595,6 +591,7 @@ module PG
       def get_result_defer(&blk)
         begin
           df = PG::EM::FeaturedDeferrable.new(&blk)
+          check_async_command_aborted!
           setup_emio_watcher(df).set_single_result_mode
         rescue PG::Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
@@ -620,6 +617,7 @@ module PG
       def get_last_result_defer(&blk)
         begin
           df = PG::EM::FeaturedDeferrable.new(&blk)
+          check_async_command_aborted!
           setup_emio_watcher(df)
         rescue PG::Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
@@ -630,6 +628,14 @@ module PG
       end
 
       private
+
+      def check_async_command_aborted!
+        if @async_command_aborted
+          error = ConnectionBad.new("previous query expired, need connection reset")
+          error.instance_variable_set(:@connection, self)
+          raise error
+        end
+      end
 
       def setup_emio_watcher(df, send_proc=nil)
         if status == PG::CONNECTION_BAD
