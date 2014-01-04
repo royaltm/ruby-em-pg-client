@@ -96,10 +96,13 @@ module PG
           cancel_timer
           send_proc = @send_proc
           @send_proc = nil
+          df = @deferrable
+          # prevent unbind error on auto re-connect
+          @deferrable = false
           if e.is_a?(PG::Error)
-            @client.async_autoreconnect!(@deferrable, e, &send_proc)
+            @client.async_autoreconnect!(df, e, &send_proc)
           else
-            @deferrable.fail(e)
+            df.fail(e)
           end
         else
           if result == false
@@ -116,6 +119,9 @@ module PG
 
         def unbind
           @is_connected = false
+          @deferrable.protect do
+            @client.raise_error ConnectionBad, "connection reset"
+          end if @deferrable
         end
       end
 
