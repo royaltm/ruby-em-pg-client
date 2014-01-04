@@ -18,7 +18,7 @@ task :test => :'test:safe'
 namespace :test do
   env_common = {'PGDATABASE' => 'test'}
   env_unix = env_common.merge('PGHOST' => ENV['PGHOST_UNIX'] || '/tmp')
-  env_inet = env_common.merge('PGHOST' => 'localhost')
+  env_inet = env_common.merge('PGHOST' => ENV['PGHOST_INET'] || 'localhost')
 
   task :warn do
     puts "WARNING: The tests needs to be run with an available local PostgreSQL server"
