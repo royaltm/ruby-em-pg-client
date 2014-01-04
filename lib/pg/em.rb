@@ -321,7 +321,6 @@ module PG
       # @see #reset_defer
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
       def reset
-        @async_command_aborted = false
         if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
           reset_defer {|r| f.resume(r) }
 
@@ -329,6 +328,11 @@ module PG
           raise conn if conn.is_a?(::Exception)
           conn
         else
+          @async_command_aborted = false
+          if @watcher
+            @watcher.detach if @watcher.watching?
+            @watcher = nil
+          end
           super
         end
       end
