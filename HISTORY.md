@@ -1,3 +1,13 @@
+0.3.1
+
+- support for asynchronous data streaming in single row mode -
+  asynchronous versions of get_result, get_last_result and
+  their deferrable variants
+- watcher improvements allowing to reset pending commands
+- minor DRY improvements in code and specs
+- single_row_mode? helper
+- spec: Travis CI and Coverage
+
 0.3.0
 
 - dedicated asynchronous connection pool
