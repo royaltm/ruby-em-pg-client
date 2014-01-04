@@ -8,6 +8,8 @@ require 'pg/em'
 $pgserver_cmd_stop = ENV['PG_CTL_STOP_CMD'] || %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" stop -s -m fast]
 $pgserver_cmd_start = ENV['PG_CTL_START_CMD'] || %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" start -s -w]
 
+DISCONNECTED_ERROR = ENV['PGHOST'].include?('/') ? PG::UnableToSend : PG::ConnectionBad
+
 shared_context 'pg-em common' do
   around(:each) do |testcase|
     EM.run(&testcase)
@@ -67,7 +69,7 @@ describe 'pg-em default autoreconnect' do
   it "should not get database size using query after server shutdown" do
     system($pgserver_cmd_stop).should be_true
     @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
-      ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+      ex.should be_an_instance_of DISCONNECTED_ERROR
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
@@ -92,7 +94,7 @@ describe 'pg-em default autoreconnect' do
       system($pgserver_cmd_stop).should be_true
       system($pgserver_cmd_start).should be_true
       @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
-        ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+        ex.should be_an_instance_of DISCONNECTED_ERROR
         @tested_proc.call
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
@@ -183,7 +185,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
       system($pgserver_cmd_stop).should be_true
       system($pgserver_cmd_start).should be_true
       @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
-        ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+        ex.should be_an_instance_of DISCONNECTED_ERROR
         @tested_proc.call
       end.should be_a_kind_of ::EM::DefaultDeferrable
     end
@@ -194,7 +196,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
-      ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+      ex.should be_an_instance_of DISCONNECTED_ERROR
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
@@ -314,7 +316,8 @@ describe 'pg-em with autoreconnect disabled' do
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
-      ex.should be_an_instance_of @client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad
+      ex.should be_an_instance_of DISCONNECTED_ERROR
+      @client.status.should be PG::CONNECTION_BAD
       EM.stop
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end

@@ -8,6 +8,8 @@ require 'pg/em'
 $pgserver_cmd_stop = ENV['PG_CTL_STOP_CMD'] || %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" stop -s -m fast]
 $pgserver_cmd_start = ENV['PG_CTL_START_CMD'] || %Q[sudo -i -u postgres pg_ctl -D "#{ENV['PGDATA']}" start -s -w]
 
+DISCONNECTED_ERROR = ENV['PGHOST'].include?('/') ? PG::UnableToSend : PG::ConnectionBad
+
 shared_context 'em-synchrony-pg common' do
   around(:each) do |testcase|
     EM.synchrony do
@@ -42,7 +44,7 @@ describe 'em-synchrony-pg default autoreconnect' do
     system($pgserver_cmd_stop).should be_true
     expect {
       @tested_proc.call
-    }.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
+    }.to raise_error DISCONNECTED_ERROR
   end
 
   it "should get database size using query after server startup" do
@@ -57,7 +59,7 @@ describe 'em-synchrony-pg default autoreconnect' do
         system($pgserver_cmd_start).should be_true
         @tested_proc.call
       end
-    end.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
+    end.to raise_error DISCONNECTED_ERROR
     @tested_proc.call
   end
 
@@ -128,7 +130,7 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
         system($pgserver_cmd_start).should be_true
         @tested_proc.call
       end
-    end.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
+    end.to raise_error DISCONNECTED_ERROR
     @tested_proc.call
   end
 
@@ -195,7 +197,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     system($pgserver_cmd_start).should be_true
     expect {
       @tested_proc.call
-    }.to raise_error(@client.host.include?('/') ? PG::UnableToSend : PG::ConnectionBad)
+    }.to raise_error DISCONNECTED_ERROR
   end
 
   it "should get database size using query after manual connection reset" do
