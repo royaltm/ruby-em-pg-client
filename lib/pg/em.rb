@@ -285,7 +285,7 @@ module PG
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-reset PG::Connection#reset
       def reset_defer(&blk)
         @async_command_aborted = false
-        df = PG::EM::FeaturedDeferrable.new(&blk)
+        df = FeaturedDeferrable.new(&blk)
         # there can be only one watch handler over the socket
         # apparently eventmachine has hard time dealing with more than one
         # for blocking reset this is not needed
@@ -414,7 +414,7 @@ module PG
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-status PG::Connection#status
       def status
         if @async_command_aborted
-          PG::CONNECTION_BAD
+          CONNECTION_BAD
         else
           super
         end
@@ -424,10 +424,10 @@ module PG
       # Perform auto re-connect. Used internally.
       def async_autoreconnect!(deferrable, error, &send_proc)
         # reconnect only if connection is bad and flag is set
-        if self.status == PG::CONNECTION_BAD && async_autoreconnect
+        if self.status == CONNECTION_BAD && async_autoreconnect
           # check if transaction was active
           was_in_transaction = case @last_transaction_status
-          when PG::PQTRANS_IDLE, PG::PQTRANS_UNKNOWN
+          when PQTRANS_IDLE, PQTRANS_UNKNOWN
             false
           else
             true
@@ -552,7 +552,7 @@ module PG
 
         class_eval <<-EOD, __FILE__, __LINE__
         def #{defer_name}(*args, &blk)
-          df = PG::EM::FeaturedDeferrable.new(&blk)
+          df = FeaturedDeferrable.new(&blk)
           send_proc = proc do
             #{send_name}(*args)
             setup_emio_watcher.watch_results(df, send_proc)
@@ -561,7 +561,7 @@ module PG
             check_async_command_aborted!
             @last_transaction_status = transaction_status
             send_proc.call
-          rescue PG::Error => e
+          rescue Error => e
             ::EM.next_tick { async_autoreconnect!(df, e, &send_proc) }
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }
@@ -594,10 +594,10 @@ module PG
       #
       def get_result_defer(&blk)
         begin
-          df = PG::EM::FeaturedDeferrable.new(&blk)
+          df = FeaturedDeferrable.new(&blk)
           check_async_command_aborted!
           setup_emio_watcher.watch_results(df, nil, true)
-        rescue PG::Error => e
+        rescue Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
         rescue Exception => e
           ::EM.next_tick { df.fail(e) }
@@ -622,10 +622,10 @@ module PG
       #
       def get_last_result_defer(&blk)
         begin
-          df = PG::EM::FeaturedDeferrable.new(&blk)
+          df = FeaturedDeferrable.new(&blk)
           check_async_command_aborted!
           setup_emio_watcher.watch_results(df)
-        rescue PG::Error => e
+        rescue Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
         rescue Exception => e
           ::EM.next_tick { df.fail(e) }
@@ -633,7 +633,7 @@ module PG
         df
       end
 
-      def raise_error(klass=PG::Error, message=error_message)
+      def raise_error(klass=Error, message=error_message)
         error = klass.new(message)
         error.instance_variable_set(:@connection, self)
         raise error
@@ -649,9 +649,9 @@ module PG
 
       def setup_emio_watcher
         case status
-        when PG::CONNECTION_BAD
+        when CONNECTION_BAD
           raise_error ConnectionBad
-        when PG::CONNECTION_OK
+        when CONNECTION_OK
           if @watcher && @watcher.watching?
             @watcher
           else
@@ -860,12 +860,12 @@ module PG
         tcount = @client_tran_count.to_i
 
         case transaction_status
-        when PG::PQTRANS_IDLE
+        when PQTRANS_IDLE
           # there is no transaction yet, so let's begin
           exec(TRAN_BEGIN_QUERY)
           # reset transaction count in case user code rolled it back before
           tcount = 0 if tcount != 0
-        when PG::PQTRANS_INTRANS
+        when PQTRANS_INTRANS
           # transaction in progress, leave it be
         else
           # transaction failed, is in unknown state or command is active
@@ -881,7 +881,7 @@ module PG
         rescue
           # error was raised
           case transaction_status
-          when PG::PQTRANS_INTRANS, PG::PQTRANS_INERROR
+          when PQTRANS_INTRANS, PQTRANS_INERROR
             # do not rollback if transaction was rolled back before
             # or is in unknown state, which means connection reset is needed
             # and rollback only from the outermost transaction block
@@ -892,15 +892,15 @@ module PG
         else
           # we are good (but not out of woods yet)
           case transaction_status
-          when PG::PQTRANS_INTRANS
+          when PQTRANS_INTRANS
             # commit only from the outermost transaction block
             exec(TRAN_COMMIT_QUERY) if tcount.zero?
-          when PG::PQTRANS_INERROR
+          when PQTRANS_INERROR
             # no ruby error was raised (or an error was rescued in code block)
             # but there was an sql error anyway
             # so rollback after the outermost block
             exec(TRAN_ROLLBACK_QUERY) if tcount.zero?
-          when PG::PQTRANS_IDLE
+          when PQTRANS_IDLE
             # the code block has terminated the transaction on its own
             # so just reset the counter
             tcount = 0
