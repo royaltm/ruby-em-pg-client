@@ -62,7 +62,7 @@ Features
 * Non-blocking / fully asynchronous processing with EventMachine.
 * Event reactor auto-detecting, asynchronous fiber-synchronized command methods
   (the same code can be used regardless of the EventMachine reactor state)
-* Asynchronous EM-style (deferrable returning) command methods.
+* Asynchronous EM-style (Deferrable returning) command methods.
 * Fully asynchronous automatic re-connects on connection failures
   (e.g.: RDBMS restarts, network failures).
 * Minimal changes to [PG::Connection](http://deveiate.org/code/pg/PG/Connection.html) API.
@@ -71,6 +71,8 @@ Features
   processing and transactions.
 * [Sequel Adapter](https://github.com/fl00r/em-pg-sequel) by Peter Yanovich.
 * Works on windows (requires ruby 2.0) (issue #7).
+* __New__ - supports asynchronous query data processing in single row mode
+  (issue #12).
 
 Requirements
 ------------
@@ -93,7 +95,7 @@ Install
 #### Gemfile
 
 ```ruby
-  gem "em-pg-client", "~> 0.3.0"
+  gem "em-pg-client", "~> 0.3.1"
 ```
 
 #### Github
