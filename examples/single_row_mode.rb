@@ -15,27 +15,36 @@ unless PG::EM::Client.single_row_mode?
   raise 'compile pg against pqlib >= 9.2 to support single row mode'
 end
 
+def tick_sleep
+  f = Fiber.current
+  EM.next_tick { f.resume }
+  Fiber.yield
+end
+
 EM.synchrony do
   EM.add_periodic_timer(0.01) { print ' ' }
 
-  db = PG::EM::ConnectionPool.new size: 2
+  db = PG::EM::ConnectionPool.new size: 3
 
   10.times do
 
-    EM::Synchrony::FiberIterator.new(%w[@ *], 2).each do |mark|
+    EM::Synchrony::FiberIterator.new(%w[@ * #], 3).each do |mark|
 
       db.hold do |pg|
-# PG::Connection compatible code starts here
-        pg.send_query("select * from #{TABLE_NAME}")
+        pg.send_query("select body from #{TABLE_NAME}")
         pg.set_single_row_mode
         rows = 0
         while result = pg.get_result
           begin
             result.check
-            result.each do |tuple, i|
+            result.each do |tuple|
               rows += 1
               # process tuple
               print mark
+              if (rows % 10).zero?
+                # let reactor do some work if data is coming too fast
+                tick_sleep
+              end
               # break stream cleanly
               pg.reset if rows > 1000
             end
@@ -47,7 +56,6 @@ EM.synchrony do
             result.clear
           end
         end
-# PG::Connection compatible code ends
       end
 
     end
