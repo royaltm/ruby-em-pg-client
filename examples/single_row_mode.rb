@@ -32,7 +32,7 @@ EM.synchrony do
         while result = pg.get_result
           begin
             result.check
-            result.each_with_index do |tuple|
+            result.each do |tuple, i|
               rows += 1
               # process tuple
               print mark
