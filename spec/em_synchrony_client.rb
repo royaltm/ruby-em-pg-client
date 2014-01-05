@@ -316,7 +316,7 @@ describe PG::EM::Client do
     @client.get_result do |result|
       result.should be_nil
     end.should be_nil
-    @client.send_query('SELECT 4; SELECT 5; SELECT 6')
+    @client.send_query('SELECT 4,pg_sleep(0.1); SELECT 5; SELECT 6')
     asynchronous = false
     EM.next_tick { asynchronous = true }
     %w[4 5 6].map do |value|
