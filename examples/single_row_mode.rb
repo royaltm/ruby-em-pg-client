@@ -31,7 +31,7 @@ EM.synchrony do
     EM::Synchrony::FiberIterator.new(%w[@ * #], 3).each do |mark|
 
       db.hold do |pg|
-        pg.send_query("select body from #{TABLE_NAME}")
+        pg.send_query("select * from #{TABLE_NAME}")
         pg.set_single_row_mode
         rows = 0
         while result = pg.get_result
