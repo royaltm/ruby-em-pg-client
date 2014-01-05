@@ -555,7 +555,7 @@ module PG
           df = PG::EM::FeaturedDeferrable.new(&blk)
           send_proc = proc do
             #{send_name}(*args)
-            setup_emio_watcher(df, send_proc)
+            setup_emio_watcher.watch_results(df, send_proc)
           end
           begin
             check_async_command_aborted!
@@ -596,7 +596,7 @@ module PG
         begin
           df = PG::EM::FeaturedDeferrable.new(&blk)
           check_async_command_aborted!
-          setup_emio_watcher(df).set_single_result_mode
+          setup_emio_watcher.watch_results(df, nil, true)
         rescue PG::Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
         rescue Exception => e
@@ -624,7 +624,7 @@ module PG
         begin
           df = PG::EM::FeaturedDeferrable.new(&blk)
           check_async_command_aborted!
-          setup_emio_watcher(df)
+          setup_emio_watcher.watch_results(df)
         rescue PG::Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
         rescue Exception => e
@@ -647,16 +647,15 @@ module PG
         end
       end
 
-      def setup_emio_watcher(df, send_proc=nil)
+      def setup_emio_watcher
         case status
         when PG::CONNECTION_BAD
           raise_error ConnectionBad
         when PG::CONNECTION_OK
           if @watcher && @watcher.watching?
-            @watcher.watch_results(df, send_proc)
+            @watcher
           else
-            @watcher = ::EM.watch(self.socket_io, Watcher, self).
-                          watch_results(df, send_proc)
+            @watcher = ::EM.watch(self.socket_io, Watcher, self)
           end
         else
           raise_error ConnectionBad, "connection reset pending"
@@ -665,7 +664,7 @@ module PG
 
       public
 
-      # @!macro auto_synchrony_api
+      # @!macro auto_synchrony_api_intro
       #   If EventMachine reactor is running and the current fiber isn't the
       #   root fiber this method performs command asynchronously yielding
       #   current fiber. Other fibers can process while waiting for the server
@@ -675,6 +674,9 @@ module PG
       #
       #   @yieldparam result [PG::Result] command result on success
       #   @raise [PG::Error]
+
+      # @!macro auto_synchrony_api
+      #   @macro auto_synchrony_api_intro
       #   @return [PG::Result] if block wasn't given
       #   @return [Object] result of the given block
 
@@ -764,11 +766,16 @@ module PG
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
             if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
+              result = fiber = nil
               #{defer_name}(*args) do |res|
-                f.resume(res)
+                f = nil
+                if fiber
+                  fiber.resume(res)
+                else
+                  result = res
+                end
               end
-
-              result = Fiber.yield
+              result = Fiber.yield if (fiber = f)
               raise result if result.is_a?(::Exception)
               if block_given? && result
                 begin
@@ -792,9 +799,11 @@ module PG
 
       # @!endgroup
 
+
       TRAN_BEGIN_QUERY = 'BEGIN'
       TRAN_ROLLBACK_QUERY = 'ROLLBACK'
       TRAN_COMMIT_QUERY = 'COMMIT'
+
       # Executes a BEGIN at the start of the block and a COMMIT at the end
       # of the block or ROLLBACK if any exception occurs.
       #

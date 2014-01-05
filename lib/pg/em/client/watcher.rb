@@ -21,13 +21,8 @@ module PG
           @one_result_mode
         end
 
-        def set_single_result_mode
-          @one_result_mode = true
-          @send_proc = nil
-        end
-
-        def watch_results(deferrable, send_proc=nil)
-          @one_result_mode = false
+        def watch_results(deferrable, send_proc=nil, one_result_mode=false)
+          @one_result_mode = one_result_mode
           @last_result = nil
           @deferrable = deferrable
           @send_proc = send_proc
@@ -45,7 +40,8 @@ module PG
               end
             end
           else
-            ::EM.next_tick { fetch_results }
+            self.notify_readable = true
+            fetch_results
           end
           self
         end
