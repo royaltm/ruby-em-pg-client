@@ -70,9 +70,9 @@ Features
 * Dedicated connection pool with dynamic size, supporting asynchronous
   processing and transactions.
 * [Sequel Adapter](https://github.com/fl00r/em-pg-sequel) by Peter Yanovich.
-* Works on windows (requires ruby 2.0) (issue #7).
+* Works on windows (requires ruby 2.0) ([issue #7][Issue 7]).
 * __New__ - supports asynchronous query data processing in single row mode
-  (issue #12).
+  ([issue #12][Issue 12]).
 
 Requirements
 ------------
@@ -404,7 +404,8 @@ The greetz go to:
 [Coverage Status]: https://coveralls.io/r/royaltm/ruby-em-pg-client
 [Build Status]: https://travis-ci.org/royaltm/ruby-em-pg-client
 [Bitdeli Badge]: https://bitdeli.com/free
-
+[Issue 7]: https://github.com/royaltm/ruby-em-pg-client/issues/7
+[Issue 12]: https://github.com/royaltm/ruby-em-pg-client/issues/12
 [GV img]: https://badge.fury.io/rb/em-pg-client.png
 [DS img]: https://gemnasium.com/royaltm/ruby-em-pg-client.png
 [CS img]: https://coveralls.io/repos/royaltm/ruby-em-pg-client/badge.png
