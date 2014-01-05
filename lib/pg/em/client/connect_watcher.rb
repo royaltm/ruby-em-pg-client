@@ -17,9 +17,7 @@ module PG
             @timer = ::EM::Timer.new(timeout) do
               detach
               @deferrable.protect do
-                error = ConnectionBad.new("timeout expired (async)")
-                error.instance_variable_set(:@connection, @client)
-                raise error
+                @client.raise_error ConnectionBad, "timeout expired (async)"
               end
             end
           end
@@ -45,11 +43,7 @@ module PG
           @timer.cancel if @timer
           detach
           @deferrable.protect_and_succeed do
-            unless polling_ok
-              error = ConnectionBad.new(@client.error_message)
-              error.instance_variable_set(:@connection, @client)
-              raise error
-            end
+            @client.raise_error ConnectionBad unless polling_ok
             @client.set_default_encoding unless reconnecting?
             @client
           end
