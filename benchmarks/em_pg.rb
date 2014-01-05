@@ -1,12 +1,10 @@
 $:.unshift('./lib')
 require 'eventmachine'
 require 'em-synchrony'
-require 'em-synchrony/pg'
+require 'pg/em/connection_pool'
 require "em-synchrony/fiber_iterator"
 require 'pp'
 require 'benchmark'
-
-$dbname = 'alpha'
 
 def benchmark(repeat=100)
   Benchmark.bm(20) do |b|
@@ -28,31 +26,36 @@ end
 
 def patch_remove_blocking
   PG::EM::Client::Watcher.module_eval <<-EOE
-    alias_method :notify_readable, :original_notify_readable
-    undef :original_notify_readable
+    alias_method :fetch_results, :original_fetch_results
+    alias_method :notify_readable, :fetch_results
+    undef :original_fetch_results
   EOE
 end
 
 def patch_blocking
+  PG::Connection.class_eval <<-EOE
+    alias_method :blocking_get_last_result, :get_last_result
+  EOE
   PG::EM::Client::Watcher.module_eval <<-EOE
-    alias_method :original_notify_readable, :notify_readable
-    def notify_readable
-      detach
+    alias_method :original_fetch_results, :fetch_results
+    def fetch_results
+      self.notify_readable = false
       begin
-        result = @client.get_last_result
+        result = @client.blocking_get_last_result
       rescue Exception => e
         @deferrable.fail(e)
       else
         @deferrable.succeed(result)
       end
     end
+    alias_method :notify_readable, :fetch_results
   EOE
 end
 
 # retrieve resources using single select query
 def single(repeat=1)
   rowcount = 0
-  p = PGconn.new :dbname => $dbname, :host => 'localhost'
+  p = PGconn.new
   p.query('select count(*) from resources') do |result|
     rowcount = result.getvalue(0,0).to_i
   end
@@ -69,7 +72,7 @@ def parallel(repeat=1, chunk_size=2000, concurrency=10)
   resources = []
   rowcount = 0
   EM.synchrony do
-    p = EM::Synchrony::ConnectionPool.new(size: concurrency) { PG::EM::Client.new :dbname => $dbname }
+    p = PG::EM::ConnectionPool.new size: concurrency
     p.query('select count(*) from resources') do |result|
       rowcount = result.getvalue(0,0).to_i
     end
@@ -78,7 +81,7 @@ def parallel(repeat=1, chunk_size=2000, concurrency=10)
       EM::Synchrony::FiberIterator.new(offsets, concurrency).each do |offset|
         p.query('select * from resources order by cdate limit $1 offset $2', [chunk_size, offset]) do |result|
           resources[offset, chunk_size] = result.values
-        end    
+        end
       end
     end
     EM.stop
