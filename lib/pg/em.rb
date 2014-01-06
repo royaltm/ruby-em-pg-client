@@ -34,6 +34,8 @@ module PG
     # - {#exec_prepared_defer}
     # - {#describe_prepared_defer}
     # - {#describe_portal_defer}
+    # - {#get_result_defer}
+    # - {#get_last_result_defer}
     #
     # are added to execute queries asynchronously,
     # returning +Deferrable+ object.
@@ -47,6 +49,8 @@ module PG
     # - {#exec_prepared}
     # - {#describe_prepared}
     # - {#describe_portal}
+    # - {#get_result}
+    # - {#get_last_result}
     #
     # and are now auto-detecting if EventMachine is running and
     # performing commands asynchronously (blocking only current fiber) or
@@ -611,8 +615,6 @@ module PG
         df
       end
 
-      alias_method :blocking_get_result, :get_result
-
       # Asynchronously retrieves all available results on the current
       # connection (from previously issued asynchronous commands like
       # +send_query()+) and immediately returns with a Deferrable.
@@ -644,6 +646,8 @@ module PG
       end
 
       # @!endgroup
+
+      alias_method :blocking_get_result, :get_result
 
       def raise_error(klass=Error, message=error_message)
         error = klass.new(message)
