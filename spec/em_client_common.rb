@@ -374,20 +374,28 @@ shared_context 'em-pg common after' do
     client.finish
   end
 
-  it "should raise reset pending after async reset began" do
-    checkpoint = false
+  it "should return nil result after async reset began" do
+    checkpoint = 0
     @client.send_query('SELECT 1')
     @client.reset_defer do |conn|
       conn.should be @client
       EM.next_tick do
-        checkpoint.should be_true
-        EM.stop
+        checkpoint.should eq 2
+        @client.send_query('SELECT 1')
+        @client.get_last_result_defer do |result|
+          result.should be_an_instance_of PG::Result
+          result.getvalue(0,0).should eq '1'
+          EM.stop
+        end
       end
     end
-    @client.get_last_result_defer do |ex|
-      ex.should be_an_instance_of PG::ConnectionBad
-      ex.message.should match /connection reset pending/
-      checkpoint = true
+    @client.get_result_defer do |result|
+      result.should be_nil
+      checkpoint += 1
+    end
+    @client.get_last_result_defer do |result|
+      result.should be_nil
+      checkpoint += 1
     end
   end
 

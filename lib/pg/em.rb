@@ -577,8 +577,6 @@ module PG
       alias_method :async_exec_defer,  :exec_defer
       alias_method :exec_params_defer, :exec_defer
 
-      # @!endgroup
-
       # Asynchronously retrieves the next result from a call to
       # #send_query (or another asynchronous command) and immediately
       # returns with a Deferrable.
@@ -595,8 +593,16 @@ module PG
       def get_result_defer(&blk)
         begin
           df = FeaturedDeferrable.new(&blk)
-          check_async_command_aborted!
-          setup_emio_watcher.watch_results(df, nil, true)
+          if status == CONNECTION_OK
+            if is_busy
+              check_async_command_aborted!
+              setup_emio_watcher.watch_results(df, nil, true)
+            else
+              df.succeed blocking_get_result
+            end
+          else
+            df.succeed
+          end
         rescue Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
         rescue Exception => e
@@ -623,8 +629,12 @@ module PG
       def get_last_result_defer(&blk)
         begin
           df = FeaturedDeferrable.new(&blk)
-          check_async_command_aborted!
-          setup_emio_watcher.watch_results(df)
+          if status == CONNECTION_OK
+            check_async_command_aborted!
+            setup_emio_watcher.watch_results(df)
+          else
+            df.succeed
+          end
         rescue Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
         rescue Exception => e
@@ -632,6 +642,8 @@ module PG
         end
         df
       end
+
+      # @!endgroup
 
       def raise_error(klass=Error, message=error_message)
         error = klass.new(message)
@@ -641,6 +653,15 @@ module PG
 
       private
 
+      def fiber_sync(df, fiber)
+        f = nil
+        df.completion do |res|
+          if f then f.resume res else return res end
+        end
+        f = fiber
+        Fiber.yield
+      end
+
       def check_async_command_aborted!
         if @async_command_aborted
           raise_error ConnectionBad, "previous query expired, need connection reset"
@@ -648,17 +669,10 @@ module PG
       end
 
       def setup_emio_watcher
-        case status
-        when CONNECTION_BAD
-          raise_error ConnectionBad
-        when CONNECTION_OK
-          if @watcher && @watcher.watching?
-            @watcher
-          else
-            @watcher = ::EM.watch(self.socket_io, Watcher, self)
-          end
+        if @watcher && @watcher.watching?
+          @watcher
         else
-          raise_error ConnectionBad, "connection reset pending"
+          @watcher = ::EM.watch(self.socket_io, Watcher, self)
         end
       end
 
@@ -730,17 +744,6 @@ module PG
       #   @see PG::EM::Client#describe_portal_defer
       #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-describe_portal PG::Connection#describe_portal
       #
-      # @!method get_result(&blk)
-      #   Retrieves the next result from a call to #send_query (or another
-      #   asynchronous command). If no more results are available returns
-      #   +nil+ and the block (if given) is never called.
-      #
-      #   @macro auto_synchrony_api
-      #   @return [nil] if no more results
-      #
-      #   @see #get_result_defer
-      #   @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_result PG::Connection#get_result
-      #
       # @!method get_last_result
       #   Retrieves all available results on the current connection
       #   (from previously issued asynchronous commands like +send_query()+)
@@ -759,24 +762,15 @@ module PG
         prepare           prepare_defer
         describe_prepared describe_prepared_defer
         describe_portal   describe_portal_defer
-        get_result        get_result_defer
         get_last_result   get_last_result_defer
         ).each_slice(2) do |name, defer_name|
 
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}(*args, &blk)
             if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
-              result = fiber = nil
-              #{defer_name}(*args) do |res|
-                f = nil
-                if fiber
-                  fiber.resume(res)
-                else
-                  result = res
-                end
+              if (result = fiber_sync #{defer_name}(*args), f).is_a?(::Exception)
+                raise result
               end
-              result = Fiber.yield if (fiber = f)
-              raise result if result.is_a?(::Exception)
               if block_given? && result
                 begin
                   yield result
@@ -796,6 +790,34 @@ module PG
       alias_method :query,       :exec
       alias_method :async_query, :exec
       alias_method :async_exec,  :exec
+
+      # Retrieves the next result from a call to #send_query (or another
+      # asynchronous command). If no more results are available returns
+      # +nil+ and the block (if given) is never called.
+      #
+      # @macro auto_synchrony_api
+      # @return [nil] if no more results
+      #
+      # @see #get_result_defer
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_result PG::Connection#get_result
+      def get_result
+        if is_busy && ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
+          if (result = fiber_sync get_result_defer, f).is_a?(::Exception)
+            raise result
+          end
+          if block_given? && result
+            begin
+              yield result
+            ensure
+              result.clear
+            end
+          else
+            result
+          end
+        else
+          super
+        end
+      end
 
       # @!endgroup
 

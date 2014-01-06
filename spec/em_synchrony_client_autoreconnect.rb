@@ -213,14 +213,15 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     begin
       @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
     rescue PG::UnableToSend
+      @client.status.should be PG::CONNECTION_BAD
+      @client.get_last_result.should be_nil
+    else
+      expect do
+        @client.get_last_result
+      end.to raise_error PG::ConnectionBad
     end
-    expect do
-      @client.get_last_result
-    end.to raise_error PG::ConnectionBad
     @client.status.should be PG::CONNECTION_BAD
-    expect do
-      @client.get_last_result
-    end.to raise_error PG::ConnectionBad
+    @client.get_last_result.should be_nil
     @client.reset
     @client.status.should be PG::CONNECTION_OK
     @client.get_last_result.should be_nil
@@ -233,10 +234,8 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     begin
       @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
     rescue PG::UnableToSend
-      expect do
-        @client.get_result
-      end.to raise_error PG::ConnectionBad
       @client.status.should be PG::CONNECTION_BAD
+      @client.get_result.should be_nil
     else
       result = @client.get_result
       result.should be_an_instance_of PG::Result
@@ -244,10 +243,12 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
         result.check
       end.to raise_error PG::Error
       @client.status.should be PG::CONNECTION_OK
+      expect do
+        @client.get_result
+      end.to raise_error PG::ConnectionBad
     end
-    expect do
-      @client.get_result
-    end.to raise_error PG::ConnectionBad
+    @client.status.should be PG::CONNECTION_BAD
+    @client.get_result.should be_nil
     @client.status.should be PG::CONNECTION_BAD
     @client.reset
     @client.status.should be PG::CONNECTION_OK

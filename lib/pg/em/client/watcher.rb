@@ -27,23 +27,12 @@ module PG
           @deferrable = deferrable
           @send_proc = send_proc
           cancel_timer
-          if @client.is_busy
-            if @client.status == PG::CONNECTION_OK
-              self.notify_readable = true
-              if (timeout = @client.query_timeout) > 0
-                @notify_timestamp = Time.now
-                setup_timer timeout
-              end
-            else
-              @deferrable.protect do
-                @client.raise_error ConnectionBad
-              end
-            end
-          else
-            self.notify_readable = true
-            fetch_results
+          self.notify_readable = true
+          if (timeout = @client.query_timeout) > 0
+            @notify_timestamp = Time.now
+            setup_timer timeout
           end
-          self
+          fetch_results
         end
 
         def setup_timer(timeout, adjustment = 0)
@@ -68,11 +57,18 @@ module PG
           end
         end
 
+        def notify_readable
+          @client.consume_input
+        rescue Exception => e
+          handle_error(e)
+        else
+          fetch_results
+        end
+
         # Carefully extract results without
         # blocking the EventMachine reactor.
         def fetch_results
           result = false
-          @client.consume_input
           until @client.is_busy
             single_result = @client.blocking_get_result
             if one_result_mode?
@@ -88,6 +84,29 @@ module PG
             @last_result = single_result
           end
         rescue Exception => e
+          handle_error(e)
+        else
+          if result == false
+            @notify_timestamp = Time.now if @timer
+          else
+            self.notify_readable = false
+            cancel_timer
+            @send_proc = nil
+            @deferrable.succeed(result)
+          end
+        end
+
+        def unbind
+          @is_connected = false
+          @deferrable.protect do
+            cancel_timer
+            @client.raise_error ConnectionBad, "connection reset"
+          end if @deferrable
+        end
+
+        private
+
+        def handle_error(e)
           self.notify_readable = false
           cancel_timer
           send_proc = @send_proc
@@ -100,26 +119,8 @@ module PG
           else
             df.fail(e)
           end
-        else
-          if result == false
-            @notify_timestamp = Time.now if @timer
-          else
-            self.notify_readable = false
-            cancel_timer
-            @send_proc = nil
-            @deferrable.succeed(result)
-          end
         end
 
-        alias_method :notify_readable, :fetch_results
-
-        def unbind
-          @is_connected = false
-          @deferrable.protect do
-            cancel_timer
-            @client.raise_error ConnectionBad, "connection reset"
-          end if @deferrable
-        end
       end
 
     end
