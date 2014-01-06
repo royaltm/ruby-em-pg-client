@@ -1,3 +1,10 @@
+0.3.2
+
+- fix: asynchronous get_result performance
+- fix+specs: query_timeout timer is canceled on connection breakdown
+- comply with pg+specs: asynchronous get_result and get_last_result return nil
+  when connection status is not ok
+
 0.3.1
 
 - support for asynchronous data streaming in single row mode -

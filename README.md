@@ -95,7 +95,7 @@ Install
 #### Gemfile
 
 ```ruby
-  gem "em-pg-client", "~> 0.3.1"
+  gem "em-pg-client", "~> 0.3.2"
 ```
 
 #### Github
