@@ -116,6 +116,7 @@ module PG
         def unbind
           @is_connected = false
           @deferrable.protect do
+            cancel_timer
             @client.raise_error ConnectionBad, "connection reset"
           end if @deferrable
         end

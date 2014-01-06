@@ -359,4 +359,36 @@ shared_context 'em-pg common after' do
     end.should be_a_kind_of ::EM::DefaultDeferrable
   end
 
+  it "should raise connection reset on connection breakdown" do
+    client = described_class.new query_timeout: 0.1
+    client.send_query('SELECT pg_sleep(10)')
+    client.get_last_result_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      ex.message.should match /connection reset/
+      EM.add_timer(0.2) do
+        client.async_command_aborted.should be_false
+        EM.stop
+      end
+    end
+    # simulate connection breakdown
+    client.finish
+  end
+
+  it "should raise reset pending after async reset began" do
+    checkpoint = false
+    @client.send_query('SELECT 1')
+    @client.reset_defer do |conn|
+      conn.should be @client
+      EM.next_tick do
+        checkpoint.should be_true
+        EM.stop
+      end
+    end
+    @client.get_last_result_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      ex.message.should match /connection reset pending/
+      checkpoint = true
+    end
+  end
+
 end
