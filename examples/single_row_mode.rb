@@ -4,7 +4,7 @@
 #
 # upside:   it's the same way you would work with PG::Connection
 # downside: it's a little verbose and doesn't support automatic re-connects
-gem 'em-pg-client', '>= 0.3.1'
+gem 'em-pg-client', '>= 0.3.2'
 require 'pg/em/connection_pool'
 require 'em-synchrony'
 require 'em-synchrony/fiber_iterator'
@@ -13,12 +13,6 @@ TABLE_NAME = 'resources'
 
 unless PG::EM::Client.single_row_mode?
   raise 'compile pg against pqlib >= 9.2 to support single row mode'
-end
-
-def tick_sleep
-  f = Fiber.current
-  EM.next_tick { f.resume }
-  Fiber.yield
 end
 
 EM.synchrony do
@@ -41,10 +35,6 @@ EM.synchrony do
               rows += 1
               # process tuple
               print mark
-              if (rows % 10).zero?
-                # let reactor do some work if data is coming too fast
-                tick_sleep
-              end
               # break stream cleanly
               pg.reset if rows > 1000
             end
