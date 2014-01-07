@@ -92,5 +92,5 @@ def parallel(repeat=1, chunk_size=2000, concurrency=10)
 end
 
 if $0 == __FILE__
-  benchmark (ARGV.first || 10).to_i
+  benchmark ARGV[0].to_i.nonzero? || 10
 end

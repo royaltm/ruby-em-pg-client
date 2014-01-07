@@ -1,4 +1,5 @@
-#em-pg-client
+em-pg-client
+============
 
 The Ruby EventMachine driver interface to the PostgreSQL RDBMS. It is based on
 [ruby-pg](https://bitbucket.org/ged/ruby-pg).
@@ -72,7 +73,7 @@ Features
 * [Sequel Adapter](https://github.com/fl00r/em-pg-sequel) by Peter Yanovich.
 * Works on windows (requires ruby 2.0) ([issue #7][Issue 7]).
 * __New__ - supports asynchronous query data processing in single row mode
-  ([issue #12][Issue 12]).
+  ([issue #12][Issue 12]). See {file:BENCHMARKS.md BENCHMARKING}.
 
 Requirements
 ------------
@@ -365,11 +366,10 @@ Bugs/Limitations
 TODO:
 -----
 
-* implement streaming results (Postgres >= 9.2)
+* more convenient streaming API
 * implement EM adapted version of `get_copy_data`, `put_copy_data`,
   `wait_for_notify` and `transaction`
 * ORM (ActiveRecord and maybe Datamapper) support as separate projects
-* present more benchmarks
 
 More Info
 ---------
