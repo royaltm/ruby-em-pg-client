@@ -698,7 +698,7 @@ module PG
       #   @return [PG::Result] if block wasn't given
       #   @return [Object] result of the given block
 
-      # @!group Auto-sensing thread or fiber blocking command methods
+      # @!group Auto-sensing fiber-synchronized command methods
 
       # @!method exec(sql, &blk)
       #   Sends SQL query request specified by +sql+ to PostgreSQL.
