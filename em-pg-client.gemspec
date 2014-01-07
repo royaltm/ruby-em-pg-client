@@ -1,6 +1,8 @@
 $:.unshift "lib"
 require 'pg/em-version'
 
+files = `git ls-files`.split("\n")
+
 Gem::Specification.new do |s|
   s.name = "em-pg-client"
   s.version = PG::EM::VERSION
@@ -13,12 +15,15 @@ Gem::Specification.new do |s|
   s.require_path = "lib"
   s.description = "PostgreSQL asynchronous EventMachine client, based on pg interface (PG::Connection)"
   s.authors = ["Rafal Michalski"]
-  s.files = `git ls-files`.split("\n") - ['.gitignore']
+  s.files = files - ['.gitignore']
   s.test_files = Dir.glob("spec/**/*")
   s.rdoc_options << "--title" << "em-pg-client" <<
     "--main" << "README.md"
   s.has_rdoc = true
-  s.extra_rdoc_files = ["README.md", "BENCHMARKS.md", "LICENSE", "HISTORY.md"]
+  s.extra_rdoc_files = [
+      files.grep(/^benchmarks\/.*\.rb$/),
+      "README.md", "BENCHMARKS.md", "LICENSE", "HISTORY.md"
+    ].flatten
   s.requirements << "PostgreSQL server"
   s.add_runtime_dependency "pg", ">= 0.17.0"
   s.add_runtime_dependency "eventmachine", "~> 1.0.0"
