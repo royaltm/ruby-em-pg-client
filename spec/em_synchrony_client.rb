@@ -338,6 +338,11 @@ describe PG::EM::Client do
 
   describe 'PG::EM::Client#transaction' do
 
+    before(:all) do
+      @client.query_timeout = 0
+      @client.query_timeout.should eq 0
+    end
+
     it "should raise ArgumentError when there is no block" do
       expect do
         @client.transaction
