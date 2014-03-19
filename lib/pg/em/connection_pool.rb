@@ -76,12 +76,16 @@ module PG
       #
       # - +:size+ = +4+ - the maximum number of concurrent connections
       # - +:lazy+ = false - should lazy allocate first connection
-      # - +:connection_class+ = PG::EM::Client
+      # - +:connection_class+ = {PG::EM::Client}
       #
       # For convenience the given block will be set as the +on_connect+ option.
       #
       # @yieldparam pg [Client] connected client instance on each newly
       #                         created connection
+      # @yieldparam is_async [Boolean] always +true+ in connection pool
+      # @yieldparam is_reset [Boolean] always +false+ unless
+      #                      +async_autoreconnect+ options is +true+ and
+      #                      was actually re-connecting
       #
       # @raise [PG::Error]
       # @raise [ArgumentError]

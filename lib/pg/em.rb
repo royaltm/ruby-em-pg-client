@@ -191,10 +191,10 @@ module PG
       #   established.
       #
       #   The first argument it receives is the +connection+ instance.
-      #   The second argument is true if the connection was established in
-      #   asynchronous manner, false otherwise.
-      #   The third argument is true when the connection has been reset or
-      #   false on new connection.
+      #   The second argument is +true+ if the connection was established in
+      #   asynchronous manner, +false+ otherwise.
+      #   The third argument is +true+ when the connection has been reset or
+      #   +false+ on new connection.
       #
       #   It's possible to execute queries from inside of the proc.
       #   The proc is being wrapped in a fiber, so both deferrable and
