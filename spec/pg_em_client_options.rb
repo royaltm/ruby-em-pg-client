@@ -21,6 +21,7 @@ describe 'em-pg-client options' do
                                 :@async_autoreconnect => true,
                                 :@connect_timeout => 10,
                                 :@query_timeout=>1,
+                                :@on_connect=>nil,
                                 :@on_autoreconnect=>nil,
                                 :@async_command_aborted=>false} }
 
@@ -78,12 +79,26 @@ describe 'em-pg-client options' do
     end.to raise_error(ArgumentError, /must respond to/)
 
     expect do
-      subject.parse_async_options [on_autoreconnect: Object.new]
+      subject.parse_async_options ['on_autoreconnect' => Object.new]
     end.to raise_error(ArgumentError, /must respond to/)
 
     options = subject.parse_async_options [on_autoreconnect: callback]
     options.should be_an_instance_of Hash
     options[:@on_autoreconnect].should be callback
+  end
+
+  it "should set only callable on_connect" do
+    expect do
+      subject.parse_async_options [on_connect: true]
+    end.to raise_error(ArgumentError, /must respond to/)
+
+    expect do
+      subject.parse_async_options ['on_connect' => Object.new]
+    end.to raise_error(ArgumentError, /must respond to/)
+
+    options = subject.parse_async_options [on_connect: callback]
+    options.should be_an_instance_of Hash
+    options[:@on_connect].should be callback
   end
 
   it "should raise error with obsolete argument" do
