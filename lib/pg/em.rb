@@ -18,6 +18,7 @@ require 'pg/em/client/connect_watcher'
 
 module PG
   module EM
+    ROOT_FIBER = Fiber.current
 
     # == PostgreSQL EventMachine client
     #
@@ -100,8 +101,6 @@ module PG
     # connection first.
     #
     class Client < PG::Connection
-
-      ROOT_FIBER = Fiber.current
 
       # @!attribute connect_timeout
       #   @return [Float] connection timeout in seconds
