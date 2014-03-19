@@ -42,10 +42,40 @@ module PG
           end
           @timer.cancel if @timer
           detach
-          @deferrable.protect_and_succeed do
+          @deferrable.protect do
             @client.raise_error ConnectionBad unless polling_ok
             @client.set_default_encoding unless reconnecting?
-            @client
+            if on_connect = @client.on_connect
+              succeed_connection_with_hook(on_connect)
+            else
+              succeed_connection
+            end
+          end
+        end
+
+        def succeed_connection
+          ::EM.next_tick { @deferrable.succeed @client }
+        end
+
+        def succeed_connection_with_hook(on_connect)
+          ::EM.next_tick do
+            Fiber.new do
+              # call on_connect handler and fail if it raises an error
+              begin
+                returned_df = on_connect.call(@client, true, @is_reset)
+              rescue => ex
+                @deferrable.fail ex
+              else
+                if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                  # the handler returned a deferrable
+                  returned_df.callback { @deferrable.succeed(@client) }
+                  # fail when handler's deferrable fails
+                  returned_df.errback { |ex| @deferrable.fail ex }
+                else
+                  @deferrable.succeed @client
+                end
+              end
+            end.resume
           end
         end
 

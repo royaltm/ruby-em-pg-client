@@ -162,17 +162,61 @@ module PG
       #     immediately sent to the server unless there was a pending
       #     transaction before the connection was reset.
       #
-      #   It's possible to execute queries from inside of the proc.
+      #   If both +on_connect+ and +on_autoreconnect+ hooks are set,
+      #   the +on_connect+ is being called first and +on_autoreconnect+ is
+      #   called only when +on_connect+ succeeds.
       #
       #   You may pass this proc as an option to {new} or {connect_defer}.
       #
-      #   @example How to use prepare in on_autoreconnect hook
+      #   @example How to use deferrable in on_autoreconnect hook
       #     pg.on_autoreconnect = proc do |conn, ex|
+      #       logger.warn "PG connection was reset: #{ex.inspect}, delaying 1 sec."
+      #       EM::DefaultDeferrable.new.tap do |df|
+      #         EM.add_timer(1) { df.succeed }
+      #       end
+      #     end
+      #
+      attr_accessor :on_autoreconnect
+
+      # @!attribute on_connect
+      #   @return [Proc<Client,is_async,is_reset>] connect hook
+      #   Proc that is called after a connection with the server has been
+      #   established.
+      #
+      #   The first argument it receives is the +connection+ instance.
+      #   The second argument is true if the connection was established in
+      #   asynchronous manner, false otherwise.
+      #   The third argument is true when the connection has been reset or
+      #   false on new connection.
+      #
+      #   It's possible to execute queries from inside of the proc.
+      #   The proc is being wrapped in a fiber, so both deferrable and
+      #   fiber-synchronized query commands may be used. However asynchronous
+      #   deferrable commands are only allowed while eventmachine reactor
+      #   is running, so check if +is_async+ argument is +true+.
+      #
+      #   If exception is raised during execution of the on_connect proc
+      #   the connecting/reset operation will fail with that exception.
+      #
+      #   The proc can control the later action with its return value:
+      #
+      #   - Deferrable object - the connection establishing status will depend
+      #     on the deferred status (only in asynchronous mode).
+      #   - Other values are ignored.
+      #
+      #   If both +on_connect+ and +on_autoreconnect+ hooks are set,
+      #   the +on_connect+ is being called first and +on_autoreconnect+ is
+      #   called only when +on_connect+ succeeds.
+      #
+      #   You may pass this proc as an option to {new} or {connect_defer}.
+      #
+      #   @example How to use prepare in on_connect hook
+      #     pg.on_connect = proc do |conn|
       #       conn.prepare("species_by_name", 
       #        "select id, name from animals where species=$1 order by name")
       #     end
       #
-      attr_accessor :on_autoreconnect
+      attr_accessor :on_connect
 
       # @!visibility private
       # Used internally for marking connection as aborted on query timeout.
@@ -200,6 +244,7 @@ module PG
         :@async_autoreconnect => nil,
         :@connect_timeout => nil,
         :@query_timeout => 0,
+        :@on_connect => nil,
         :@on_autoreconnect => nil,
         :@async_command_aborted => false,
       }.freeze
@@ -212,6 +257,13 @@ module PG
             case key.to_sym
             when :async_autoreconnect
               options[:@async_autoreconnect] = value
+              true
+            when :on_connect
+              if value.respond_to? :call
+                options[:@on_connect] = value
+              else
+                raise ArgumentError, "on_connect must respond to `call'"
+              end
               true
             when :on_reconnect
               raise ArgumentError, "on_reconnect is no longer supported, use on_autoreconnect"
@@ -337,6 +389,8 @@ module PG
             @watcher = nil
           end
           super
+          @on_connect.call(self, false, true) if @on_connect
+          self
         end
       end
 
@@ -375,7 +429,11 @@ module PG
             conn
           end
         else
-          super(*args)
+          conn = super(*args)
+          if on_connect = conn.on_connect
+            on_connect.call(conn, false, false)
+          end
+          conn
         end
       end
 

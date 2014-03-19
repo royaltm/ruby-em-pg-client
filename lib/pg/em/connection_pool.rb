@@ -76,15 +76,25 @@ module PG
       #
       # - +:size+ = +4+ - the maximum number of concurrent connections
       # - +:lazy+ = false - should lazy allocate first connection
-      # - +:connection_class+ = {PG::EM::Client}
+      # - +:connection_class+ = PG::EM::Client
+      #
+      # For convenience the given block will be set as the +on_connect+ option.
+      #
+      # @yieldparam pg [Client] connected client instance on each newly
+      #                         created connection
       #
       # @raise [PG::Error]
       # @raise [ArgumentError]
-      def initialize(options = {})
+      # @see Client#on_connect
+      def initialize(options = {}, &on_connect)
         @available = []
         @pending = []
         @allocated = {}
         @connection_class = Client
+
+        if block_given?
+          options = {on_connect: on_connect}.merge(options)
+        end
 
         lazy = false
         @options = options.reject do |key, value|
@@ -179,6 +189,10 @@ module PG
       #   @return [Boolean] asynchronous auto re-connect status
       #   Set {Client#async_autoreconnect}  on all present and future connections
       #   in this pool or read value from options
+      # @!attribute [rw] on_connect
+      #   @return [Proc<Client,is_async,is_reset>] connect hook
+      #   Set {Client#on_connect} on all present and future connections
+      #   in this pool or read value from options
       # @!attribute [rw] on_autoreconnect
       #   @return [Proc<Client, Error>] auto re-connect hook
       #   Set {Client#on_autoreconnect} on all present and future connections
@@ -186,6 +200,7 @@ module PG
       %w[connect_timeout
          query_timeout
          async_autoreconnect
+         on_connect
          on_autoreconnect].each do |name|
         class_eval <<-EOD, __FILE__, __LINE__
           def #{name}=(value)
