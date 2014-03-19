@@ -181,6 +181,7 @@ The options are:
 * `query_timeout`
 * `async_autoreconnect`
 * `on_autoreconnect`
+* `on_connect`
 
 Only `connect_timeout` is a standard `libpq` option, although changing it with
 the accessor method affects asynchronous functions only.
