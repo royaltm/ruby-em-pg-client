@@ -126,3 +126,14 @@ task :benchmark do
     benchmark(i)
   end
 end
+
+desc "Console"
+task :console do
+  require 'irb'
+  require 'irb/completion'
+  require 'em-synchrony'
+  require 'em-pg-client'
+  require 'pg/em/connection_pool'
+  ARGV.clear
+  IRB.start
+end
