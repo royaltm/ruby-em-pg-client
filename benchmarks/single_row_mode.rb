@@ -33,22 +33,22 @@ end
 
 def threads(repeat, concurrency)
   db = Hash.new { |pool, id| pool[id] = PG::Connection.new }
-  (repeat/concurrency).times do
-    (0...concurrency).map do |i|
-      Thread.new do
+  (0...concurrency).map do |i|
+    Thread.new do
+      (repeat/concurrency).times do
         stream_results(db[i])
       end
-    end.each(&:join)
-  end
+    end
+  end.each(&:join)
   db.each_value(&:finish).clear
 end
 
 def fibers(repeat, concurrency)
   EM.synchrony do
     db = PG::EM::ConnectionPool.new size: concurrency, lazy: true
-    (repeat/concurrency).times do
-      FiberIterator.new((0...concurrency), concurrency).each do
-        db.hold do |pg|
+    FiberIterator.new((0...concurrency), concurrency).each do
+      db.hold do |pg|
+        (repeat/concurrency).times do
           stream_results(pg)
         end
       end
