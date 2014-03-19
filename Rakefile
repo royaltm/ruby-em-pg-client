@@ -40,9 +40,27 @@ namespace :test do
   end
 
   desc "Run safe tests only"
-  task :safe  => [:warn, :spec, :async, :fiber]
+  task :safe  => [:warn, :spec, :async, :fiber, :on_connect, :pool]
   task :async => [:async_inet, :async_unix]
   task :fiber => [:fiber_inet, :fiber_unix]
+  task :on_connect => [:on_connect_inet, :on_connect_unix]
+  task :pool => [:pool_inet, :pool_unix]
+
+  task :pool_inet do
+    sh env_inet.merge('COVNAME'=>'pool:inet'), "rspec spec/em_connection_pool.rb"
+  end
+
+  task :pool_unix do
+    sh env_unix.merge('COVNAME'=>'pool:unix'), "rspec spec/em_connection_pool.rb" unless windows_os?
+  end
+
+  task :on_connect_inet do
+    sh env_inet.merge('COVNAME'=>'on_connect:inet'), "rspec spec/em_client_on_connect.rb"
+  end
+
+  task :on_connect_unix do
+    sh env_unix.merge('COVNAME'=>'on_connect:unix'), "rspec spec/em_client_on_connect.rb" unless windows_os?
+  end
 
   task :async_inet do
     sh env_inet.merge('COVNAME'=>'async:inet'), "rspec spec/em_client.rb"
