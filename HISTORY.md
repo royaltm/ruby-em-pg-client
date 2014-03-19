@@ -1,3 +1,11 @@
+forthcoming release
+
+- rake: console for convenient debug repl
+- added on_connect callback
+- block provided to ConnectionPool.new as on_connect option
+- spec: connection pool database tests
+- spec: on_connect tests
+
 0.3.2
 
 - fix: asynchronous get_result performance
