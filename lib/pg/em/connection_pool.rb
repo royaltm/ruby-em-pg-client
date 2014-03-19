@@ -94,6 +94,7 @@ module PG
         @available = []
         @pending = []
         @allocated = {}
+        @max_size = DEFAULT_SIZE
         @connection_class = Client
 
         if block_given?
@@ -114,8 +115,6 @@ module PG
             true
           end
         end
-
-        @max_size ||= DEFAULT_SIZE
 
         raise ArgumentError, "#{self.class}.new: pool size must be > 1" if @max_size < 1
 
