@@ -147,6 +147,13 @@ module PG
       #   The second is the original +exception+ that caused the reconnecting
       #   process.
       #
+      #   If exception is raised during execution of the on_autoreconnect proc
+      #   the reset operation will fail with that exception.
+      #
+      #   It's possible to execute queries from inside of the proc.
+      #   The proc is being wrapped in a fiber, so both deferrable and
+      #   fiber-synchronized query commands may be used.
+      #
       #   The proc can control the later action with its return value:
       #
       #   - +false+ (explicitly, +nil+ is ignored) - the original +exception+
