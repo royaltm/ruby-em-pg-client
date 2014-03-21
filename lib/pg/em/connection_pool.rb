@@ -116,7 +116,7 @@ module PG
           end
         end
 
-        raise ArgumentError, "#{self.class}.new: pool size must be > 1" if @max_size < 1
+        raise ArgumentError, "#{self.class}.new: pool size must be >= 1" if @max_size < 1
 
         # allocate first connection, unless we are lazy
         hold unless lazy
@@ -345,7 +345,7 @@ module PG
             begin
               id = fiber.object_id
               # mark allocated pool for proper #size value
-              # the connecting process will yield from fiber
+              # the connection is made asynchronously
               @allocated[id] = opts = DeferredOptions.new
               conn = @connection_class.new(@options)
             ensure

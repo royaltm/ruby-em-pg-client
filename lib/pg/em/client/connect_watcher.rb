@@ -62,13 +62,13 @@ module PG
             Fiber.new do
               # call on_connect handler and fail if it raises an error
               begin
-                returned_df = on_connect.call(@client, true, @is_reset)
+                returned_df = on_connect.call(@client, true, reconnecting?)
               rescue => ex
                 @deferrable.fail ex
               else
                 if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
                   # the handler returned a deferrable
-                  returned_df.callback { @deferrable.succeed(@client) }
+                  returned_df.callback { @deferrable.succeed @client }
                   # fail when handler's deferrable fails
                   returned_df.errback { |ex| @deferrable.fail ex }
                 else

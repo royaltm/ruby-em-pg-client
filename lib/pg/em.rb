@@ -350,7 +350,6 @@ module PG
         df = FeaturedDeferrable.new(&blk)
         # there can be only one watch handler over the socket
         # apparently eventmachine has hard time dealing with more than one
-        # for blocking reset this is not needed
         if @watcher
           @watcher.detach if @watcher.watching?
           @watcher = nil
@@ -461,8 +460,8 @@ module PG
 
       # Closes the backend connection.
       #
-      # Detaches watch handler to prevent memory leak then
-      # calls parent PG::Connection#finish[http://deveiate.org/code/pg/PG/Connection.html#method-i-finish].
+      # Detaches watch handler to prevent memory leak after
+      # calling parent PG::Connection#finish[http://deveiate.org/code/pg/PG/Connection.html#method-i-finish].
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-finish PG::Connection#finish
       def finish
         super
