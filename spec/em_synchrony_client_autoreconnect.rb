@@ -168,6 +168,54 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
     EM.stop
   end
 
+  it "should execute on_connect before on_autoreconnect after server restart" do
+    @client.on_connect.should be_nil
+    run_on_connect = false
+    @client.on_connect = proc do |client, is_async, is_reset|
+      client.should be_an_instance_of PG::EM::Client
+      is_async.should be_true
+      is_reset.should be_true
+      client.query('SELECT pg_database_size(current_database());') {
+        run_on_connect = true
+      }
+    end
+    @client.on_autoreconnect = proc do |client, ex|
+      run_on_connect.should be_true
+      @on_autoreconnect.call(client, ex)
+    end
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    @tested_proc.call
+    EM.stop
+  end
+
+  it "should skip on_autoreconnect when on_connect failed after server restart" do
+    run_on_connect = false
+    run_on_autoreconnect = false
+    @client.on_connect = proc do |client, is_async, is_reset|
+      client.should be_an_instance_of PG::EM::Client
+      is_async.should be_true
+      is_reset.should be_true
+      begin
+        client.query('SELLECT 1;')
+      ensure
+        run_on_connect = true
+      end
+    end
+    @client.on_autoreconnect = proc do |client, ex|
+      run_on_autoreconnect = true
+    end
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    expect do
+      @client.exec_prepared('get_db_size')
+    end.to raise_error PG::SyntaxError
+    @client.status.should be PG::CONNECTION_OK
+    run_on_connect.should be_true
+    run_on_autoreconnect.should be_false
+    EM.stop
+  end
+
   before(:all) do
     @tested_proc = proc do
       @client.exec_prepared('get_db_size') do |result|
