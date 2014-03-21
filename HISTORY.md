@@ -1,10 +1,11 @@
 forthcoming release
 
-- rake: console for convenient debug repl
+- rake: console for debugging
 - added on_connect callback
-- block provided to ConnectionPool.new as on_connect option
+- given block to ConnectionPool.new set as on_connect option fallback
 - spec: connection pool database tests
 - spec: on_connect tests
+- spec: added travis rvm 2.1.0 and updated postgres server versions
 
 0.3.2
 
