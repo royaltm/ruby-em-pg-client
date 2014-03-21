@@ -10,3 +10,5 @@ Thumbs.db
 sftp-config.json
 /coverage
 Gemfile.lock
+/.bundle
+/test*.rb
