@@ -97,8 +97,9 @@ module PG
     #
     # {#describe_prepared} and {#exec_prepared} after
     # {#prepare} should only be invoked on the *same* connection.
-    # If you are using a connection pool, make sure to acquire a single
-    # connection first.
+    # If you are using a {ConnectionPool}, make sure to acquire a single
+    # connection first or execute +prepare+ command on every connection
+    # using +#on_connect+ hook.
     #
     class Client < PG::Connection
 
@@ -106,13 +107,13 @@ module PG
       #   @return [Float] connection timeout in seconds
       #   Connection timeout. Affects {#reset} and {#reset_defer}.
       #
-      #   Changing this property does not affect thread-blocking {#reset}.
-      #
-      #   However if passed as initialization option, it also affects blocking
-      #   {#reset}.
+      #   Changing this property does not affect thread-blocking {#reset} unless
+      #   passed as a +connection_hash+.
       #
       #   To enable it set to some positive value. To disable it: set to 0.
-      #   You can also specify this as an option to {new} or {connect_defer}.
+      #
+      #   You may set +:connect_timeout+ in a +connection_hash+ argument
+      #   passed to {new} or {connect_defer}.
       attr_accessor :connect_timeout
 
       # @!attribute query_timeout
@@ -122,62 +123,71 @@ module PG
       #   {#reset} and {#reset_defer}.
       #
       #   To enable it set to some positive value. To disable it: set to 0.
-      #   You can also specify this as an option to {new} or {connect_defer}.
+      #
+      #   You may set +:query_timeout+ in a +connection_hash+ argument
+      #   passed to {new} or {connect_defer}.
       attr_accessor :query_timeout
 
       # @!attribute async_autoreconnect
       #   @return [Boolean] asynchronous auto re-connect status
       #   Enable/disable auto re-connect feature (+true+/+false+).
       #   Defaults to +false+ unless {#on_autoreconnect} is specified
-      #   as an initialization option.
+      #   in a +connection_hash+.
       #
       #   Changing {#on_autoreconnect} with accessor method doesn't change
       #   the state of {#async_autoreconnect}.
       #
-      #   You can also specify this as an option to {new} or {connect_defer}.
+      #   You may set +:async_autoreconnect+ in a +connection_hash+ argument
+      #   passed to {new} or {connect_defer}.
       attr_accessor :async_autoreconnect
 
       # @!attribute on_autoreconnect
       #   @return [Proc<Client, Error>] auto re-connect hook
-      #   Proc that is called after a connection with the server has been
-      #   automatically re-established. It's being invoked just before the
-      #   pending command is sent to the server.
+      #   A proc like object that is being called after a connection with the
+      #   server has been automatically re-established. It's being invoked
+      #   just before the pending command is sent to the server.
       #
-      #   The first argument it receives is the +connection+ instance.
-      #   The second is the original +exception+ that caused the reconnecting
+      #   @yieldparam pg [Client] re-connected client instance
+      #   @yieldparam error [Exception] an error after which the auto re-connect
+      #                              process began.
+      #   @yieldreturn [false|true|Exception|EM::Deferrable|*]
+      #
+      #   The first argument it receives is the connected {Client} instance.
+      #   The second is the original +error+ that caused the reconnecting
       #   process.
       #
-      #   If exception is raised during execution of the on_autoreconnect proc
-      #   the reset operation will fail with that exception.
-      #
-      #   It's possible to execute queries from inside of the proc.
-      #   The proc is being wrapped in a fiber, so both deferrable and
+      #   It's possible to execute queries from the +on_autoreconnect+ hook.
+      #   Code is being executed in a fiber context, so both deferrable and
       #   fiber-synchronized query commands may be used.
       #
-      #   The proc can control the later action with its return value:
+      #   If exception is raised during execution of the +on_autoreconnect+
+      #   hook the reset operation will fail with that exception.
+      #
+      #   The hook can control later actions with its return value:
       #
       #   - +false+ (explicitly, +nil+ is ignored) - the original +exception+
       #     is raised/passed back and the pending query command is not sent
       #     again to the server.
       #   - +true+ (explicitly, truish values are ignored), the pending command
       #     is called regardless of the connection's last transaction status.
-      #   - Exception object - is raised/passed back and the pending command
+      #   - +Exception+ object - is raised/passed back and the pending command
       #     is not sent.
-      #   - Deferrable object - the chosen action will depend on the deferred
-      #     status.
+      #   - +Deferrable+ object - the chosen action will depend on the returned
+      #     deferrable status.
       #   - Other values are ignored and the pending query command is
-      #     immediately sent to the server unless there was a pending
-      #     transaction before the connection was reset.
+      #     immediately sent to the server unless there was a transaction in
+      #     progress before the connection was reset.
       #
       #   If both +on_connect+ and +on_autoreconnect+ hooks are set,
       #   the +on_connect+ is being called first and +on_autoreconnect+ is
       #   called only when +on_connect+ succeeds.
       #
-      #   You may pass this proc as an option to {new} or {connect_defer}.
+      #   You may set +:on_autoreconnect+ hook in a +connection_hash+ argument
+      #   passed to {new} or {connect_defer}.
       #
       #   @example How to use deferrable in on_autoreconnect hook
-      #     pg.on_autoreconnect = proc do |conn, ex|
-      #       logger.warn "PG connection was reset: #{ex.inspect}, delaying 1 sec."
+      #     pg.on_autoreconnect do |pg, e|
+      #       logger.warn "PG connection was reset: #{e.inspect}, delaying 1 sec."
       #       EM::DefaultDeferrable.new.tap do |df|
       #         EM.add_timer(1) { df.succeed }
       #       end
@@ -195,41 +205,49 @@ module PG
 
       # @!attribute on_connect
       #   @return [Proc<Client,is_async,is_reset>] connect hook
-      #   Proc that is called after a connection with the server has been
-      #   established.
+      #   A proc like object that is being called after a connection with
+      #   the server has been established.
       #
-      #   The first argument it receives is the +connection+ instance.
+      #   @yieldparam pg [Client] connected client instance
+      #   @yieldparam is_async [Boolean] flag indicating if the connection
+      #               was established asynchronously
+      #   @yieldparam is_reset [Boolean] flag indicating if the connection
+      #               client was reset
+      #   @yieldreturn [EM::Deferrable|*]
+      #
+      #   The first argument it receives is the connected {Client} instance.
       #   The second argument is +true+ if the connection was established in
       #   asynchronous manner, +false+ otherwise.
       #   The third argument is +true+ when the connection has been reset or
       #   +false+ on new connection.
       #
-      #   It's possible to execute queries from inside of the proc.
-      #   The proc is being wrapped in a fiber, so both deferrable and
-      #   fiber-synchronized query commands may be used. However asynchronous
-      #   deferrable commands are only allowed while eventmachine reactor
-      #   is running, so check if +is_async+ argument is +true+.
+      #   It's possible to execute queries from the +on_connect+ hook.
+      #   Code is being executed in a fiber context, so both deferrable and
+      #   fiber-synchronized query commands may be used.
+      #   However deferrable commands will work only if eventmachine reactor
+      #   is running, so check if +is_async+ is +true+.
       #
-      #   If exception is raised during execution of the on_connect proc
+      #   If exception is raised during execution of the +on_connect+ hook
       #   the connecting/reset operation will fail with that exception.
       #
-      #   The proc can control the later action with its return value:
+      #   The hook can control later actions with its return value:
       #
-      #   - Deferrable object - the connection establishing status will depend
-      #     on the deferred status (only in asynchronous mode).
+      #   - +Deferrable+ object - the connection establishing status will depend
+      #     on the returned deferrable status (only in asynchronous mode).
       #   - Other values are ignored.
       #
       #   If both +on_connect+ and +on_autoreconnect+ hooks are set,
       #   the +on_connect+ is being called first and +on_autoreconnect+ is
       #   called only when +on_connect+ succeeds.
       #
-      #   You may pass this proc as an option to {new} or {connect_defer}.
+      #   You may set +:on_connect+ hook in a +connection_hash+ argument
+      #   passed to {new} or {connect_defer}.
       #
       #   @example How to use prepare in on_connect hook
-      #     pg.on_connect = proc do |conn|
-      #       conn.prepare("species_by_name", 
+      #     PG::EM::Client.new(on_connect: proc {|pg|
+      #       pg.prepare("species_by_name",
       #        "select id, name from animals where species=$1 order by name")
-      #     end
+      #     })
       #
       attr_writer :on_connect
 
@@ -327,8 +345,8 @@ module PG
       # hooks of the returned deferrable.
       #
       # Special {Client} options (e.g.: {#async_autoreconnect}) must be
-      # provided as +connection_hash+ argument variant. They will be ignored
-      # if passed as a +connection_string+.
+      # provided in a +connection_hash+ argument variant. They will be ignored
+      # if passed in a +connection_string+.
       #
       # +client_encoding+ *will* be set according to +Encoding.default_internal+.
       #
@@ -429,8 +447,8 @@ module PG
       # @raise [PG::Error]
       #
       # Special {Client} options (e.g.: {#async_autoreconnect}) must be
-      # provided as +connection_hash+ argument variant. They will be ignored
-      # if passed as a +connection_string+.
+      # provided in a +connection_hash+ argument variant. They will be ignored
+      # if passed in a +connection_string+.
       #
       # +client_encoding+ *will* be set according to +Encoding.default_internal+.
       #

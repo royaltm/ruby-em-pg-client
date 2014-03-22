@@ -82,7 +82,8 @@ module PG
       #
       # @yieldparam pg [Client] connected client instance on each newly
       #                         created connection
-      # @yieldparam is_async [Boolean] always +true+ in connection pool
+      # @yieldparam is_async [Boolean] always +true+ in a connection pool
+      #                      context
       # @yieldparam is_reset [Boolean] always +false+ unless
       #                      +async_autoreconnect+ options is +true+ and
       #                      was actually re-connecting
