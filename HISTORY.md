@@ -1,4 +1,4 @@
-forthcoming release
+0.3.3
 
 - rake: console for debugging
 - added on_connect callback
