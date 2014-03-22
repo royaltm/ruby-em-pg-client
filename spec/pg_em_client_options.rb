@@ -124,12 +124,10 @@ describe 'em-pg-client options' do
     client.on_connect.should be_nil
     client.on_autoreconnect = nil
     client.on_autoreconnect.should be_nil
-    client.on_connect { :connect }.should be_an_instance_of Proc
-    client.on_connect.should be_an_instance_of Proc
-    client.on_connect.call.should be :connect
-    client.on_autoreconnect { :autoreconnect }.should be_an_instance_of Proc
-    client.on_autoreconnect.should be_an_instance_of Proc
-    client.on_autoreconnect.call.should be :autoreconnect
+    client.on_connect(&callback).should be callback
+    client.on_connect.should be callback
+    client.on_autoreconnect(&callback).should be callback
+    client.on_autoreconnect.should be callback
   end
 
 end

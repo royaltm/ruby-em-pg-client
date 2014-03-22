@@ -212,11 +212,24 @@ module PG
             @available.each(&b)
             @allocated.each_value(&b)
           end
-
-          def #{name}
-            @options[:#{name}] || @options['#{name}']
-          end
         EOD
+        if name.start_with?('on_')
+          class_eval <<-EOD, __FILE__, __LINE__
+            def #{name}(&hook)
+              if block_given?
+                self.#{name} = hook
+              else
+                @options[:#{name}] || @options['#{name}']
+              end
+            end
+          EOD
+        else
+          class_eval <<-EOD, __FILE__, __LINE__
+            def #{name}
+              @options[:#{name}] || @options['#{name}']
+            end
+          EOD
+        end
         DeferredOptions.class_eval <<-EOD, __FILE__, __LINE__
           def #{name}=(value)
             self[:#{name}=] = value

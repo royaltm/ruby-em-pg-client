@@ -19,6 +19,7 @@ describe PG::EM::ConnectionPool do
   let(:pgerror)      { PG::Error.new }
   let(:fooerror)     { RuntimeError.new 'foo' }
   let(:timeout)      { 10 }
+  let(:hook)         { proc {|c| }}
 
   it "should allocate one connection" do
     client.should_receive(:new).with({}).once.and_return(client.allocate)
@@ -60,6 +61,8 @@ describe PG::EM::ConnectionPool do
       client.allocate.tap do |conn|
         conn.should_receive(:connect_timeout=).with(timeout).once
         conn.should_receive(:query_timeout=).with(timeout).once
+        conn.should_receive(:on_autoreconnect=).with(hook).twice
+        conn.should_receive(:on_connect=).with(hook).twice
         conn.should_receive(:finish).once
       end
     end.exactly(3)
@@ -87,6 +90,12 @@ describe PG::EM::ConnectionPool do
           pool.allocated.length.should eq 2
           pool.connect_timeout = timeout
           pool.query_timeout = timeout
+          pool.on_connect = hook
+          pool.on_connect.should be hook
+          pool.on_connect(&hook)
+          pool.on_autoreconnect = hook
+          pool.on_autoreconnect.should be hook
+          pool.on_autoreconnect(&hook)
         end
       end.resume
     end
@@ -99,12 +108,15 @@ describe PG::EM::ConnectionPool do
     pool.max_size.should eq 3
     pool.available.length.should eq 0
     pool.allocated.length.should eq 0
+    pool.on_connect.should be hook
+    pool.on_autoreconnect.should be hook
     pool.size.should eq 0
   end
 
   it "should allocate new connection with altered attributes" do
     client.should_receive(:new).with(
-      {connect_timeout: timeout, query_timeout: timeout}
+      {connect_timeout: timeout, query_timeout: timeout,
+       on_connect: hook, on_autoreconnect: hook}
     ).once.and_return(client.allocate)
     pool = subject.new connection_class: client, size: 1, lazy: true
     pool.should be_an_instance_of subject
@@ -112,8 +124,12 @@ describe PG::EM::ConnectionPool do
     pool.query_timeout.should be_nil
     pool.connect_timeout = timeout
     pool.query_timeout = timeout
+    pool.on_connect = hook
+    pool.on_autoreconnect(&hook)
     pool.connect_timeout.should eq timeout
     pool.query_timeout.should eq timeout
+    pool.on_connect.should be hook
+    pool.on_autoreconnect.should be hook
     pool.max_size.should eq 1
     pool.available.length.should eq 0
     pool.allocated.length.should eq 0
@@ -130,19 +146,27 @@ describe PG::EM::ConnectionPool do
       options.should be_empty
       pool.connect_timeout = timeout
       pool.query_timeout = timeout
+      pool.on_connect = hook
+      pool.on_autoreconnect(&hook)
       client.allocate.tap do |conn|
         conn.should_receive(:connect_timeout=).with(timeout).once
         conn.should_receive(:query_timeout=).with(timeout).once
+        conn.should_receive(:on_autoreconnect=).with(hook).once
+        conn.should_receive(:on_connect=).with(hook).once
       end
     end.once
     client.should_receive(:connect_defer) do |options|
       options.should be_empty
       pool.connect_timeout = timeout
       pool.query_timeout = timeout
+      pool.on_connect(&hook)
+      pool.on_autoreconnect = hook
       deferrable.new.tap do |df|
         df.succeed(client.allocate.tap do |conn|
           conn.should_receive(:connect_timeout=).with(timeout).once
           conn.should_receive(:query_timeout=).with(timeout).once
+          conn.should_receive(:on_autoreconnect=).with(hook).once
+          conn.should_receive(:on_connect=).with(hook).once
         end)
       end
     end.once
