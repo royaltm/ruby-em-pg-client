@@ -5,7 +5,9 @@ forthcoming release
 - given block to ConnectionPool.new set as on_connect option fallback
 - spec: connection pool database tests
 - spec: on_connect tests
+- spec: on_connect + on_autoreconnect auto re-connect tests
 - spec: added travis rvm 2.1.0 and updated postgres server versions
+- sugar: on_connect and on_autoreconnect block setters
 
 0.3.2
 
