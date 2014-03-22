@@ -107,4 +107,29 @@ describe 'em-pg-client options' do
     end.to raise_error ArgumentError
   end
 
+  it "should set on_* options with a writer or a block" do
+    async_args = subject.parse_async_options([])
+    client = subject.allocate
+    client.instance_eval {
+      async_args.each {|k, v| instance_variable_set(k, v) }
+    }
+    client.should be_an_instance_of subject
+    client.on_connect.should be_nil
+    client.on_autoreconnect.should be_nil
+    client.on_connect = callback
+    client.on_connect.should be callback
+    client.on_autoreconnect = callback
+    client.on_autoreconnect.should be callback
+    client.on_connect = nil
+    client.on_connect.should be_nil
+    client.on_autoreconnect = nil
+    client.on_autoreconnect.should be_nil
+    client.on_connect { :connect }.should be_an_instance_of Proc
+    client.on_connect.should be_an_instance_of Proc
+    client.on_connect.call.should be :connect
+    client.on_autoreconnect { :autoreconnect }.should be_an_instance_of Proc
+    client.on_autoreconnect.should be_an_instance_of Proc
+    client.on_autoreconnect.call.should be :autoreconnect
+  end
+
 end

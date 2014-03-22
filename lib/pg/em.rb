@@ -183,7 +183,15 @@ module PG
       #       end
       #     end
       #
-      attr_accessor :on_autoreconnect
+      attr_writer :on_autoreconnect
+
+      def on_autoreconnect(&hook)
+        if block_given?
+          @on_autoreconnect = hook
+        else
+          @on_autoreconnect
+        end
+      end
 
       # @!attribute on_connect
       #   @return [Proc<Client,is_async,is_reset>] connect hook
@@ -223,7 +231,15 @@ module PG
       #        "select id, name from animals where species=$1 order by name")
       #     end
       #
-      attr_accessor :on_connect
+      attr_writer :on_connect
+
+      def on_connect(&hook)
+        if block_given?
+          @on_connect = hook
+        else
+          @on_connect
+        end
+      end
 
       # @!visibility private
       # Used internally for marking connection as aborted on query timeout.
