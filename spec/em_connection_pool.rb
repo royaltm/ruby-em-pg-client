@@ -23,7 +23,7 @@ shared_context 'test on_connect' do
       results << index
     end
     delta = Time.now - start
-    delta.should be_between(sleep_interval, sleep_interval * 3)
+    delta.should be_between(sleep_interval, sleep_interval * concurrency / 2)
     results.sort.should eq (1..concurrency).to_a
     pool.size.should eq concurrency
     EM.stop
@@ -44,7 +44,7 @@ shared_context 'test on_connect' do
             results << index
             if results.length == concurrency
               delta = Time.now - start
-              delta.should be_between(sleep_interval, sleep_interval * 3)
+              delta.should be_between(sleep_interval, sleep_interval * concurrency / 2)
               results.sort.should eq (0...concurrency).to_a
               pool.size.should eq concurrency
               EM.stop
@@ -78,8 +78,8 @@ shared_context 'test on_connect error' do
       pool.query_defer(sleep_query) do |ex|
         ex.should be_an_instance_of on_connect_exception
         EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_an_instance_of PG::EM::FeaturedDeferrable
+    end.should be_an_instance_of PG::EM::FeaturedDeferrable
   end
 
 end
