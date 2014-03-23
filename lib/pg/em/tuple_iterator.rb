@@ -15,8 +15,8 @@ module PG
       # @yieldparam tuple [Hash] - first tuple from a single result
       # @yieldparam iter [PG::EM::Iterator] - iterator instance
       #
-      # The block should invoke +iter.next+ when it has finished
-      # processing +tuple+.
+      # The block should invoke +iter.next+ when it's finished processing
+      # the +tuple+ to indicate that it's ready to receive the next one.
       #
       # @macro iterator_each_deferrable_api
       #
@@ -42,8 +42,8 @@ module PG
       # @yieldparam row [Array] - first row from a single result
       # @yieldparam iter [PG::EM::Iterator] - iterator instance
       #
-      # The block should invoke +iter.next+ when it has finished
-      # processing +row+.
+      # The block should invoke +iter.next+ when it's finished processing
+      # the +row+ to indicate that it's ready to receive the next one.
       #
       # @macro iterator_each_deferrable_api
       #

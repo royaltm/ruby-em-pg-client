@@ -3,14 +3,22 @@ module PG
   module EM
     # Author:: Rafal Michalski
     #
-    # Asynchrony aware iterator over results from previous command query
-    # providing methods for both callback-style deferrables and
+    # Asynchrony aware iterator for retrieving results from previous command
+    # query providing methods for both callback-style deferrables and
     # fiber-synchronized enumerators.
+    #
+    # The +iterator+ is a deferrable itself and will receive a +succeeded+ status
+    # upon completion of the iteration or +failed+ status on a database error.
     class Iterator
       include DeferrableFeatures
       include Enumerable
 
-      attr_reader :client, :foreach
+      attr_reader :client
+
+      # @!attribute [rw] foreach
+      #   @return [Proc] iterator handler
+      #   Callback invoked with each result upon iteration.
+      attr_accessor :foreach
 
       def initialize(client = nil)
         @client = client
@@ -21,7 +29,9 @@ module PG
         @stop = nil
       end
 
-      # Return +true+ if iteration has finished, failed or has been stopped.
+      # Return +true+ if all the results has been retrieved or the iteration
+      # has been stopped or when there was a database error.
+      # Otherwise returns +false+.
       # @return [Boolean]
       def finished?
         @deferred_status != :unknown
@@ -37,7 +47,7 @@ module PG
       #   iterator succeeds passing :stop to callbacks.
       #   
       #   When there are no more results the iteration terminates invoking
-      #   success callback on +iterator+.
+      #   success callbacks on +iterator+.
       #   
       #   Whenever there is a result error the iteration terminates immediately
       #   invoking errback on +iterator+. Remaining results are fetched and
@@ -52,8 +62,8 @@ module PG
       # @yieldparam result [PG::Result] - single result from a query
       # @yieldparam iter [PG::EM::Iterator] - iterator instance
       #
-      # The block should invoke +iter.next+ when it has finished
-      # processing the +result+.
+      # The block should invoke +iter.next+ when it's finished processing
+      # the +result+ to indicate that it's ready to receive the next one.
       #
       # @macro iterator_each_deferrable_api
       #
@@ -86,7 +96,8 @@ module PG
       #   Each result will automatically be cleared on next iteration and before
       #   completion.
       #   
-      #   When there are no more results the iteration terminates returning self.
+      #   When there are no more results the iteration terminates returning
+      #   +self+.
       #   
       #   Calling {#stop} will interrupt current query, reset the connection and
       #   terminate iteration. It is safe to call {#stop} from inside of the
@@ -96,7 +107,7 @@ module PG
       #   In this instance it's possible to call this method again to retrieve
       #   the remaining results.
       #   
-      #   Returns an Enumerator if block is not provided.
+      #   Returns an +Enumerator+ if block is not provided.
       #   
       #   Whenever there is a result error the iteration terminates immediately
       #   and the error is being raised.
@@ -127,7 +138,7 @@ module PG
       def each_result(&block)
         if block_given?
           if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
-            ret = self
+            ret = nil
             fiber = f
             result = nil
             each_result_defer do |res|
@@ -137,20 +148,24 @@ module PG
                 result = res
               end
             end.completion do |arg|
-              ret = arg if arg
-              fiber.transfer if fiber
+              ::EM.next_tick do
+                ret = arg || self
+                if fiber
+                  fiber.transfer
+                elsif result && ret.is_a?(Exception)
+                  raise ret
+                end
+              end
             end
             while result ||= ROOT_FIBER.transfer
               fiber = nil
-              block.call result
+              call_block_safely(block, result)
               result = nil
               self.next
+              break if ret
               fiber = f
             end
             fiber = nil
-            # if @stop
-            #   if (err = sync @stop, f).is_a?(Exception) then raise err end
-            # end
             raise ret if ret.is_a?(Exception)
             ret
           else
@@ -170,6 +185,9 @@ module PG
               end
               begin
                 block.call result
+              rescue => e
+                client.reset
+                fail(e)
               ensure
                 result.clear
               end
@@ -181,6 +199,9 @@ module PG
         end
       end
 
+      # @!attribute client
+      #   @return [PG::EM::Client] postgres client instance
+      #   A connection used to retrieve results.
       def client=(client)
         @client = client
         ::EM.next_tick do
@@ -191,42 +212,59 @@ module PG
         end if @next == :start
       end
 
-      # Fetches next result asynchronously and invokes foreach callback
-      # or finishes iteration with either success or failure.
-      # Clears any previous result.
-      # It's tail call optimized if results are available immediately.
+      # Fetches next result asynchronously and invokes +foreach+ handler
+      # with received result or finishes iteration setting status to either
+      # +succeeded+ or +failed+.
+      #
+      # This method returns immediately unless called outside of the +forach+
+      # handler and there are immediately available results.
+      #
+      # After fetching a new result, clears previous one before calling
+      # +foreach+. Clears the last result before completing.
+      #
+      # This method is also used by {#each_result} and {#each_result_defer} to 
+      # actually start the iteration. It is safe to call it more than once
+      # before the result is actually received.
+      #
+      # If results are available immediately, performs a loop to avoid tail
+      # call recursion. If called from inside of the +foreach+ handler,
+      # ensures that the handler is never called recursively and
+      # returns before it's called again with another result.
+      # @return [nil]
       def next
-        return if @stop
-        @next || begin
-          if client
-            if @next == false
-              # only mark that next is expected
-              @next = true
-              return
-            end
-            (@next = client.get_result_defer).callback do |result|
-              @next = false
-              handle_result(result)
-              # quick loop instead of tail call
-              while @next
-                if client.is_busy
-                  @next = nil
-                  self.next
-                  break
-                end
-                @next = false
-                handle_result client.blocking_get_result
-              end
-              @next ||= nil
-            end.errback do |err|
-              @next = nil
-              clear_last_result
-              fail(err)
-            end
-          else
-            # start as soon as client is set
-            @next = :start
+        if @next || @stop || finished?
+          clear_last_result
+          return
+        end
+        if client
+          if @next == false
+            # mark only, next result is expected immediately
+            @next = true
+            return
           end
+          (@next = client.get_result_defer).callback do |result|
+            @next = false
+            handle_result(result)
+            # quick loop instead of tail call
+            while @next
+              if client.is_busy
+                @next = nil
+                self.next
+                break
+              end
+              @next = false
+              handle_result client.blocking_get_result
+            end
+            # clear @next == false
+            @next ||= nil
+          end.errback do |err|
+            @next = nil
+            clear_last_result
+            fail(err)
+          end
+        else
+          # start as soon as client is set
+          @next = :start
         end
         nil
       end
@@ -234,20 +272,33 @@ module PG
       private
 
       def handle_result(result)
-        clear_last_result
+        last_result = clear_last_result
         if result
           begin
             result.check
           rescue PG::Error => e
             result.clear
+            send_proc = client.instance_variable_get(:@watcher).send_proc
             client.get_last_result_defer { fail(e) }
+            # restart after autoreconnect only if no results has been processed
+            if send_proc && !last_result
+              client.instance_variable_get(:@watcher).set_send_proc send_proc
+            end
           else
             @last_result = result
-            foreach.call result, self
+            call_block_safely(foreach, result)
           end
         else
           succeed
         end
+      end
+
+      def call_block_safely(block, result)
+        block.call result, self
+      rescue => e
+        @next = false
+        clear_last_result
+        client.get_last_result_defer { fail(e) }
       end
 
       public
@@ -267,14 +318,23 @@ module PG
       # either with success passing +:stop+ to callback or
       # with failure when connection reset fails.
       # Clears any remaining result.
-      # May be called in both blocking and asynchronous context.
+      # May be called in both blocking and asynchronous context,
+      # inside or outside of +foreach+ handler safely.
       def stop
         return @stop if finished? || !client || @stop
-        clear_last_result
         if ::EM.reactor_running?
-          (@stop = client.reset_defer).
-            callback { @stop = nil; succeed :stop }.
-            errback  {|e| @stop = nil; fail e }
+          if @next.is_a?(::EM::Deferrable)
+            @stop = stop = ::PG::EM::FeaturedDeferrable.new
+            @next.completion do
+              @stop.bind_status client.reset_defer.
+                callback { succeed :stop }.
+                errback  {|e| fail e }
+            end
+          else
+            (@stop = client.reset_defer).
+              callback { succeed :stop }.
+              errback  {|e| fail e }
+          end
         else
           begin
             client.reset
@@ -287,7 +347,9 @@ module PG
       end
 
       # Calls asynchronous #stop waiting for the reset to finish.
-      # This method is primarily to be called outside of an iterator block.
+      #
+      # @note This method must not be called by an iterator handler.
+      #
       # May be called in both blocking and asynchronous context.
       def sync_stop
         return if finished?
@@ -311,9 +373,10 @@ module PG
       private
 
       def clear_last_result
-        if @last_result
-          @last_result.clear
+        if last_result = @last_result
           @last_result = nil
+          last_result.clear
+          true
         end
       end
     end
