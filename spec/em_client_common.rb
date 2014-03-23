@@ -112,10 +112,14 @@ shared_context 'em-pg common after' do
       @client.single_row_mode?.should be_true
       @client.get_result_defer do |result|
         result.should be_nil
+        @client.command_active?.should be_false
         @client.send_query('SELECT data, id FROM foo order by id')
+        @client.command_active?.should be_true
         @client.set_single_row_mode
+        @client.command_active?.should be_true
         EM::Iterator.new(@values, 1).map(proc{ |(data, id), iter|
           @client.get_result_defer do |result|
+            @client.command_active?.should be_true
             result.should be_an_instance_of PG::Result
             result.check
             result.result_status.should eq PG::PGRES_SINGLE_TUPLE
@@ -125,6 +129,7 @@ shared_context 'em-pg common after' do
             iter.return value
           end.should be_a_kind_of ::EM::Deferrable
         }, proc{ |results|
+          @client.command_active?.should be_true
           results.length.should eq @values.length
           @client.get_result_defer do |result|
             result.should be_an_instance_of PG::Result
@@ -132,8 +137,10 @@ shared_context 'em-pg common after' do
             result.result_status.should eq PG::PGRES_TUPLES_OK
             result.to_a.should eq []
             result.clear
+            @client.command_active?.should be_true
             @client.get_result_defer do |result|
               result.should be_nil
+              @client.command_active?.should be_false
               EM.stop
             end.should be_a_kind_of ::EM::Deferrable
           end.should be_a_kind_of ::EM::Deferrable

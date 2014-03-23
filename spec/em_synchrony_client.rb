@@ -117,10 +117,14 @@ describe PG::EM::Client do
 
     it "should get each result in single row mode" do
       @client.single_row_mode?.should be_true
+      @client.command_active?.should be_false
       @client.send_query('SELECT data, id FROM foo order by id')
+      @client.command_active?.should be_true
       @client.set_single_row_mode
+      @client.command_active?.should be_true
       @values.each do |data, id|
         result = @client.get_result
+        @client.command_active?.should be_true
         result.should be_an_instance_of PG::Result
         result.result_status.should eq PG::PGRES_SINGLE_TUPLE
         result.check
@@ -128,13 +132,16 @@ describe PG::EM::Client do
         result.clear
         value.should eq [{'data' => data, 'id' => id.to_s}]
       end
+      @client.command_active?.should be_true
       result = @client.get_result
       result.should be_an_instance_of PG::Result
       result.check
       result.result_status.should eq PG::PGRES_TUPLES_OK
       result.to_a.should eq []
       result.clear
+      @client.command_active?.should be_true
       @client.get_result.should be_nil
+      @client.command_active?.should be_false
       EM.stop
     end
 
