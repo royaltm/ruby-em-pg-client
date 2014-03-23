@@ -8,6 +8,8 @@ module PG
       # Author:: Rafal Michalski
       module Watcher
 
+        attr_accessor :send_proc
+
         def initialize(client)
           @client = client
           @is_connected = true
@@ -21,11 +23,15 @@ module PG
           @one_result_mode
         end
 
+        def set_send_proc(send_proc)
+          @send_proc = send_proc
+        end
+
         def watch_results(deferrable, send_proc=nil, one_result_mode=false)
           @one_result_mode = one_result_mode
           @last_result = nil
           @deferrable = deferrable
-          @send_proc = send_proc
+          @send_proc = send_proc unless one_result_mode
           cancel_timer
           self.notify_readable = true
           if (timeout = @client.query_timeout) > 0
