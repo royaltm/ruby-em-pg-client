@@ -97,7 +97,7 @@ module PG
           else
             self.notify_readable = false
             cancel_timer
-            @send_proc = nil
+            @send_proc = nil unless one_result_mode?
             @deferrable.succeed(result)
           end
         end
