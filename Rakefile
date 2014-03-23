@@ -152,6 +152,7 @@ task :console do
   require 'em-synchrony'
   require 'em-pg-client'
   require 'pg/em/connection_pool'
+  require 'pg/em/iterable'
   ARGV.clear
   IRB.start
 end
