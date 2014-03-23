@@ -71,7 +71,7 @@ describe 'pg-em default autoreconnect' do
     @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
       ex.should be_an_instance_of DISCONNECTED_ERROR
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should get database size using query after server startup" do
@@ -85,7 +85,7 @@ describe 'pg-em default autoreconnect' do
     @client.query_defer('SELLECT 1') do |ex|
       ex.should be_an_instance_of PG::SyntaxError
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail when in transaction after server restart" do
@@ -96,7 +96,7 @@ describe 'pg-em default autoreconnect' do
       @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
         ex.should be_an_instance_of DISCONNECTED_ERROR
         @tested_proc.call
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 
@@ -111,7 +111,7 @@ describe 'pg-em default autoreconnect' do
         result.should be_nil
         EM.stop
       end
-    end.should be_a_kind_of EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail to get each result asynchronously after server restart" do
@@ -130,8 +130,8 @@ describe 'pg-em default autoreconnect' do
         @client.get_result_defer do |result|
           result.should be_nil
           EM.stop
-        end.should be_a_kind_of ::EM::DefaultDeferrable
-      end.should be_a_kind_of EM::DefaultDeferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 
@@ -141,7 +141,7 @@ describe 'pg-em default autoreconnect' do
         result.should be_an_instance_of PG::Result
         result[0]['pg_database_size'].to_i.should be > 0
         EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
     @options = {async_autoreconnect: true}
     @client = PG::EM::Client.new(@options)
@@ -176,7 +176,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     @client.query_defer('SELLECT 1') do |ex|
       ex.should be_an_instance_of PG::SyntaxError
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail when in transaction after server restart" do
@@ -187,7 +187,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
       @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
         ex.should be_an_instance_of DISCONNECTED_ERROR
         @tested_proc.call
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 
@@ -198,7 +198,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     @client.query_defer('SELECT pg_database_size(current_database());') do |ex|
       ex.should be_an_instance_of DISCONNECTED_ERROR
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should complete on true from on_autoreconnect after server restart" do
@@ -209,7 +209,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
       result.should be_an_instance_of PG::Result
       result[0]['pg_database_size'].to_i.should be > 0
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail on query with true from on_autoreconnect after restart" do
@@ -219,7 +219,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     @client.query_defer('SELLECT 1') do |ex|
       ex.should be_an_instance_of PG::SyntaxError
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail on on_autoreconnect deferrable fail after server restart" do
@@ -231,7 +231,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     @client.query_defer('SELECT 1') do |ex|
       ex.should be :boo
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail on raised error in on_autoreconnect after server restart" do
@@ -243,7 +243,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     @client.query_defer('SELECT 1') do |ex|
       ex.should be_an_instance_of TypeError
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail to get last result asynchronously after server restart" do
@@ -258,12 +258,12 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
         result.should be_nil
         EM.stop
       end
-    end.should be_a_kind_of EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail to get each result asynchronously after server restart" do
     @client.on_autoreconnect = proc {
-      EM::DefaultDeferrable.new.tap {|df| df.succeed }
+      ::EM::DefaultDeferrable.new.tap {|df| df.succeed }
     }
     @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
     system($pgserver_cmd_stop).should be_true
@@ -280,8 +280,8 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
         @client.get_result_defer do |result|
           result.should be_nil
           EM.stop
-        end.should be_a_kind_of ::EM::DefaultDeferrable
-      end.should be_a_kind_of EM::DefaultDeferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 
@@ -327,7 +327,7 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
       run_on_connect.should be_true
       run_on_autoreconnect.should be_false
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   before(:all) do
@@ -336,11 +336,11 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
         result.should be_an_instance_of PG::Result
         result[0]['pg_database_size'].to_i.should be > 0
         EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
     @on_autoreconnect = proc do |client, ex|
       df = client.prepare_defer('get_db_size', 'SELECT pg_database_size(current_database());')
-      df.should be_a_kind_of ::EM::DefaultDeferrable
+      df.should be_a_kind_of ::EM::Deferrable
       df
     end
     @options = {on_autoreconnect: @on_autoreconnect}
@@ -364,7 +364,7 @@ describe 'pg-em with autoreconnect disabled' do
       ex.should be_an_instance_of DISCONNECTED_ERROR
       @client.status.should be PG::CONNECTION_BAD
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should get database size using query after async manual connection reset" do
@@ -373,7 +373,7 @@ describe 'pg-em with autoreconnect disabled' do
       conn.should be @client
       @client.status.should be PG::CONNECTION_OK
       @tested_proc.call
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should fail to get last result asynchronously after server restart" do
@@ -384,7 +384,7 @@ describe 'pg-em with autoreconnect disabled' do
           conn.should be @client
           @client.status.should be PG::CONNECTION_OK
           EM.stop
-        end.should be_a_kind_of ::EM::DefaultDeferrable
+        end.should be_a_kind_of ::EM::Deferrable
       end
     end
     system($pgserver_cmd_stop).should be_true
@@ -397,13 +397,13 @@ describe 'pg-em with autoreconnect disabled' do
         ex.should be_nil
         @client.status.should be PG::CONNECTION_BAD
         check_get_last_result.call
-      end.should be_a_kind_of EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     else
       @client.get_last_result_defer do |ex|
         ex.should be_an_instance_of PG::ConnectionBad
         @client.status.should be PG::CONNECTION_BAD
         check_get_last_result.call
-      end.should be_a_kind_of EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 
@@ -416,8 +416,8 @@ describe 'pg-em with autoreconnect disabled' do
           conn.should be @client
           @client.status.should be PG::CONNECTION_OK
           EM.stop
-        end.should be_a_kind_of ::EM::DefaultDeferrable
-      end.should be_a_kind_of EM::DefaultDeferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
@@ -447,7 +447,7 @@ describe 'pg-em with autoreconnect disabled' do
         result.should be_an_instance_of PG::Result
         result[0]['pg_database_size'].to_i.should be > 0
         EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
     @client = PG::EM::Client.new
     @client.set_notice_processor {|msg| puts "warning from pgsql: #{msg.to_s.chomp.inspect}"}

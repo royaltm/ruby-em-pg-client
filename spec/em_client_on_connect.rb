@@ -52,11 +52,11 @@ shared_context 'test on_connect' do
             client.exec_prepared_defer(query_name) do |result|
               result.should be_an_instance_of PG::Result
               result[0]['pg_database_size'].to_i.should be > 0
-            end.should be_a_kind_of ::EM::DefaultDeferrable
+            end.should be_a_kind_of ::EM::Deferrable
             EM.stop
-          end.should be_a_kind_of ::EM::DefaultDeferrable
-        end.should be_a_kind_of ::EM::DefaultDeferrable
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+          end.should be_a_kind_of ::EM::Deferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 
@@ -81,9 +81,9 @@ shared_context 'test on_connect error' do
           client.reset_defer do |ex|
             ex.should be_an_instance_of on_connect_exception
             EM.stop
-          end.should be_a_kind_of ::EM::DefaultDeferrable
-        end.should be_a_kind_of ::EM::DefaultDeferrable
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+          end.should be_a_kind_of ::EM::Deferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 
@@ -162,7 +162,7 @@ describe 'on_connect option' do
 
   describe 'with on_connect deferrable failure' do
     let(:on_connect) { proc {|client|
-      EM::DefaultDeferrable.new.tap {|df| df.fail on_connect_exception.new }
+      ::EM::DefaultDeferrable.new.tap {|df| df.fail on_connect_exception.new }
     } }
 
     include_context 'test on_connect error'

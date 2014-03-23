@@ -19,7 +19,7 @@ describe PG::EM::Client do
                                            [id, DateTime.now, data]) do |result|
       result.should be_an_instance_of PG::Result
         iter.return(DateTime.parse(result[0]['cdate']))
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     }, proc{ |results|
       @cdates.replace results
       results.length.should == @values.length

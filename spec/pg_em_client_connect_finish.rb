@@ -13,7 +13,7 @@ shared_context 'test deferred' do
         ex.connection.should be_an_instance_of subject
         ex.connection.finished?.should be_false
         EM.stop
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
   end
 end

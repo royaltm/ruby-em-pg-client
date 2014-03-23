@@ -15,7 +15,7 @@ shared_context 'test async connect timeout' do
       ex.message.should include 'timeout expired (async)'
       (Time.now - start).should be > timeout
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
     this.should be :first
   end
 

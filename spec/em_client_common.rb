@@ -8,7 +8,7 @@ module PGSpecMacros
       result.should be_an_instance_of PG::Result
       additional_checks.call(result) if additional_checks
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   def pg_exec_and_check_with_error(client, stop, err_class, err_message, method, *args, &additional_checks)
@@ -17,7 +17,7 @@ module PGSpecMacros
       exception.to_s.should include err_message if err_message
       additional_checks.call(exception) if additional_checks
       EM.next_tick { EM.stop } if stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   def ensure_em_stop
@@ -123,7 +123,7 @@ shared_context 'em-pg common after' do
             value.should eq [{'data' => data, 'id' => id.to_s}]
             result.clear
             iter.return value
-          end.should be_a_kind_of ::EM::DefaultDeferrable
+          end.should be_a_kind_of ::EM::Deferrable
         }, proc{ |results|
           results.length.should eq @values.length
           @client.get_result_defer do |result|
@@ -135,10 +135,10 @@ shared_context 'em-pg common after' do
             @client.get_result_defer do |result|
               result.should be_nil
               EM.stop
-            end.should be_a_kind_of ::EM::DefaultDeferrable
-          end.should be_a_kind_of ::EM::DefaultDeferrable
+            end.should be_a_kind_of ::EM::Deferrable
+          end.should be_a_kind_of ::EM::Deferrable
         })
-      end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
     end
 
   end
@@ -197,7 +197,7 @@ shared_context 'em-pg common after' do
       pg_exec_and_check(conn, :query_defer, 'SELECT pg_database_size(current_database());') do |result|
         result[0]['pg_database_size'].to_i.should be > 0
       end
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
     this.should be :first
   end
 
@@ -210,7 +210,7 @@ shared_context 'em-pg common after' do
       conn.should be_an_instance_of described_class
       conn.external_encoding.should be conn.internal_encoding
       EM.stop
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
     this.should be :first
   end
 
@@ -332,8 +332,8 @@ shared_context 'em-pg common after' do
           result.should be_nil
           EM.stop
         end
-      end.should be_a_kind_of ::EM::DefaultDeferrable
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should get each result asynchronously" do
@@ -348,15 +348,15 @@ shared_context 'em-pg common after' do
           result.getvalue(0,0).should eq value
           result.clear
           iter.return value
-        end.should be_a_kind_of ::EM::DefaultDeferrable
+        end.should be_a_kind_of ::EM::Deferrable
       }, proc{ |results|
         results.should eq %w[4 5 6]
         @client.get_result_defer do |result|
           result.should be_nil
           EM.stop
-        end.should be_a_kind_of ::EM::DefaultDeferrable
+        end.should be_a_kind_of ::EM::Deferrable
       })
-    end.should be_a_kind_of ::EM::DefaultDeferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   it "should raise connection reset on connection breakdown" do
