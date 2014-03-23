@@ -1,3 +1,7 @@
+forthcoming release
+
+- feature: iterators and query streaming helpers
+
 0.3.3
 
 - rake: console for debugging
