@@ -922,6 +922,14 @@ module PG
 
       # @!endgroup
 
+      # Returns +true+ if there are more results available from a last call to
+      # a +#send_query+ (or another asynchronous command).
+      # Before sending next command this method should returns +false+.
+      # @return [Boolean]
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-send_query PG::Connection#send_query
+      def command_active?
+        transaction_status == PQTRANS_ACTIVE
+      end
 
       TRAN_BEGIN_QUERY = 'BEGIN'
       TRAN_ROLLBACK_QUERY = 'ROLLBACK'
