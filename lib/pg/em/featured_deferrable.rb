@@ -4,11 +4,8 @@ module PG
     # Deferrable with error protectors
     #
     # Author:: Rafal Michalski
-    class FeaturedDeferrable < ::EM::DefaultDeferrable
-
-      def initialize(&blk)
-        completion(&blk) if block_given?
-      end
+    module DeferrableFeatures
+      include ::EM::Deferrable
 
       def completion(&blk)
         callback(&blk)
@@ -36,6 +33,14 @@ module PG
       def bind_status(df)
         df.callback { |*a| succeed(*a) }
         df.errback  { |*a| fail(*a) }
+      end
+    end
+
+    class FeaturedDeferrable
+      include DeferrableFeatures
+
+      def initialize(&blk)
+        completion(&blk) if block_given?
       end
     end
 
