@@ -3,7 +3,7 @@ module PG
   module EM
 
     # This iterator is best served in a single_row_mode.
-    # Used by IterableMixin#query_stream_defer and IterableMixin#query_stream.
+    # Used by {IterableMixin#query_stream_defer} and {IterableMixin#query_stream}.
     class TupleIterator < Iterator
       # Iterates asynchronously using the specified block or proc over each
       # first result tuple from a call to +Client#send_query+ (or another asynchronous
@@ -90,7 +90,7 @@ module PG
       #    puts i, result.inspect
       #  end
       #  puts iter.take(5).inspect
-      #  iter.sync_stop
+      #  iter.stop_sync
       #
       # @see #each_defer
       # @see IterableMixin#query_stream
@@ -135,7 +135,7 @@ module PG
       #    puts i, result.inspect
       #  end
       #  puts iter.each_row.take(5).inspect
-      #  iter.sync_stop
+      #  iter.stop_sync
       def each_row(&blk)
         if block_given?
           each_result do |result|

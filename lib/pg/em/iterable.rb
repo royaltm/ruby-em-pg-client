@@ -6,6 +6,23 @@ module PG
 
     module IterableMixin
 
+      attr_accessor :result_iterator
+
+      def stop_iterator_defer
+        if iter = @result_iterator
+          @result_iterator = nil
+          iter.stop
+        end
+      end
+
+      def stop_iterator
+        if iter = @result_iterator
+          @result_iterator = nil
+          iter.stop_sync
+          iter
+        end
+      end
+
       # @!group Iterator command methods
 
       # Query server asynchronously providing results in single row mode.
@@ -45,7 +62,7 @@ module PG
       #    puts "error: #{err.inspect}"
       #  end
       def query_stream_defer(*args, &block)
-        iter = @async_iterator || TupleIterator.new
+        iter = @result_iterator ||= TupleIterator.new
         iter.each_defer(&block) if block_given?
         send_proc = proc do
           send_query(*args)
@@ -100,7 +117,7 @@ module PG
         else
           send_query(*args)
           set_single_row_mode
-          iter = TupleIterator.new(self)
+          iter = @result_iterator ||= TupleIterator.new(self)
         end
         if block_given?
           iter.each(&block)
@@ -123,7 +140,7 @@ module PG
         def query_stream_defer(*args, &blk)
           iter = TupleIterator.new
           hold_deferred do |client|
-            client.instance_variable_set(:@async_iterator, iter)
+            client.result_iterator = iter
             client.query_stream_defer(*args, &blk)
           end.errback { |err| iter.fail(err) }
           iter
@@ -131,12 +148,15 @@ module PG
 
         def query_stream(*args, &blk)
           iter = TupleIterator.new
+          #  TODO: make hold fiber + deferrable release
           hold_deferred do |client|
-            client.instance_variable_set(:@async_iterator, iter)
+            client.result_iterator = iter
             client.query_stream_defer(*args)
           end.errback { |err| iter.fail(err) }
           if block_given?
-            iter.each(&blk)
+            res = iter.each(&blk)
+            iter.stop_sync
+            res
           else
             iter
           end

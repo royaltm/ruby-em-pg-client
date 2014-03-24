@@ -8,7 +8,7 @@ module PG
     # fiber-synchronized enumerators.
     #
     # The +iterator+ is a deferrable itself and will receive a +succeeded+ status
-    # upon completion of the iteration or +failed+ status on a database error.
+    # upon completion of the iteration or +failed+ status on an error.
     class Iterator
       include DeferrableFeatures
       include Enumerable
@@ -30,7 +30,7 @@ module PG
       end
 
       # Return +true+ if all the results has been retrieved or the iteration
-      # has been stopped or when there was a database error.
+      # has been stopped or when there was an error.
       # Otherwise returns +false+.
       # @return [Boolean]
       def finished?
@@ -203,13 +203,13 @@ module PG
       #   @return [PG::EM::Client] postgres client instance
       #   A connection used to retrieve results.
       def client=(client)
-        @client = client
         ::EM.next_tick do
           if @next == :start
             @next = nil
             self.next
           end
-        end if @next == :start
+        end if @client.nil? && @next == :start
+        @client = client
       end
 
       # Fetches next result asynchronously and invokes +foreach+ handler
@@ -324,7 +324,7 @@ module PG
         return @stop if finished? || !client || @stop
         if ::EM.reactor_running?
           if @next.is_a?(::EM::Deferrable)
-            @stop = stop = ::PG::EM::FeaturedDeferrable.new
+            @stop = ::PG::EM::FeaturedDeferrable.new
             @next.completion do
               @stop.bind_status client.reset_defer.
                 callback { succeed :stop }.
@@ -348,11 +348,9 @@ module PG
 
       # Calls asynchronous #stop waiting for the reset to finish.
       #
-      # @note This method must not be called by an iterator handler.
-      #
       # May be called in both blocking and asynchronous context.
-      def sync_stop
-        return if finished?
+      def stop_sync
+        return self if finished?
         if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
           sync stop, f
         else
@@ -373,9 +371,9 @@ module PG
       private
 
       def clear_last_result
-        if last_result = @last_result
+        if @last_result
+          @last_result.clear
           @last_result = nil
-          last_result.clear
           true
         end
       end
