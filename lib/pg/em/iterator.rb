@@ -170,8 +170,9 @@ module PG
             ret
           else
             # blocking implementation
-            callback do |res|
-              return res
+            ret = nil
+            callback do |arg|
+              ret = arg || self
             end
             errback do |err|
               raise err
@@ -190,9 +191,11 @@ module PG
                 fail(e)
               ensure
                 result.clear
+                break if ret
               end
             end
             succeed
+            ret
           end
         else
           to_enum(:each_result)
@@ -344,6 +347,7 @@ module PG
             fail(e)
           else
             succeed :stop
+            :stop
           end
         end
       end

@@ -61,7 +61,17 @@ module PG
       #    puts "error: #{err.inspect}"
       #  end
       def query_stream_defer(*args, &block)
-        iter = @result_iterator ||= TupleIterator.new
+        if !@result_iterator || @result_iterator.finished?
+          iter = @result_iterator = TupleIterator.new
+        elsif @result_iterator.client.nil?
+          iter = @result_iterator
+        else
+          # stop previous iterator (highly experimental)
+          iter = stop_iterator_defer
+          @result_iterator = TupleIterator.new
+          iter.completion { query_stream_defer(*args, &block) }
+          return @result_iterator
+        end
         iter.each_defer(&block) if block_given?
         send_proc = proc do
           send_query(*args)
@@ -114,9 +124,10 @@ module PG
         if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
           iter = query_stream_defer(*args)
         else
+          @result_iterator.stop if @result_iterator
           send_query(*args)
           set_single_row_mode
-          iter = @result_iterator ||= TupleIterator.new(self)
+          iter = @result_iterator = TupleIterator.new(self)
         end
         if block_given?
           iter.each(&block)
