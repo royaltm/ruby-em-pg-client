@@ -70,27 +70,32 @@ module PG
       # @yieldparam tuple [Hash] - first tuple from a single result
       #
       # @example Simple iteration
-      #  iter = pg.query_stream('select value from foo')
-      #  iter.each_with_index.map do |row, i|
+      #  pg.query_stream('select value from foo').each_with_index.map do |row, i|
       #    if i > 100
-      #      iter.stop
+      #      pg.stop_iterator
       #    end
       #    row[:value]
       #  end
       #
-      # @example Advanced enumerator
-      #  iter = pg.query_stream('select * from foo')
-      #  iter.each_with_index do |t, i|
-      #    puts i, t.inspect
+      # @example Enumerator
+      #  pg.query_stream('select * from foo').each_with_index do |tuple, i|
+      #    puts i, tuple.inspect
       #    break if i >= 4
       #  end
-      #  enum = iter.each_with_index
+      #  enum = pg.result_iterator.each_with_index
       #  5.times do
-      #    result, i = enum.next
-      #    puts i, result.inspect
+      #    tuple, i = enum.next
+      #    puts i, tuple.inspect
       #  end
-      #  puts iter.take(5).inspect
-      #  iter.stop_sync
+      #  puts enum.take(5).inspect
+      #  pg.stop_iterator
+      #
+      # @example Lazy enumerator
+      #  values = pg.query_stream('select value from foo').lazy.
+      #    with_index.select {|_, i| i.odd?}.
+      #    map {|t,| t['value']}.
+      #    take(10).force
+      #  pg.stop_iterator
       #
       # @see #each_defer
       # @see IterableMixin#query_stream
@@ -115,27 +120,35 @@ module PG
       # @see IterableMixin#query_stream
       #
       # @example Simple iteration
-      #  iter = pg.query_stream('select value from foo')
-      #  iter.each_row.with_index.map do |row, i|
+      #  pg.query_stream('select value from foo').each_row.with_index.map do |row, i|
       #    if i > 100
-      #      iter.stop
+      #      pg.stop_iterator
       #    end
       #    row.first
       #  end
       #
-      # @example Advanced enumerator
-      #  iter = pg.query_stream('select * from foo')
-      #  iter.each_row.with_index do |t, i|
-      #    puts i, t.inspect
+      # @example Enumerator
+      #  pg.query_stream('select * from foo').each_row.with_index do |row, i|
+      #    puts i, row.inspect
       #    break if i >= 4
       #  end
-      #  enum = iter.each_row.with_index
+      #  enum = pg.result_iterator.each_row.with_index
       #  5.times do
-      #    result, i = enum.next
-      #    puts i, result.inspect
+      #    row, i = enum.next
+      #    puts i, row.inspect
       #  end
-      #  puts iter.each_row.take(5).inspect
-      #  iter.stop_sync
+      #  puts enum.take(5).inspect
+      #  pg.stop_iterator
+      #
+      # @example Lazy enumerator
+      #  values = pg.query_stream('select value from foo').each_row.lazy.
+      #    with_index.select {|_, i| i.odd?}.
+      #    map {|r,| r[0]}.
+      #    take(10).force
+      #  pg.stop_iterator
+      #
+      # @see #each_row_defer
+      # @see IterableMixin#query_stream
       def each_row(&blk)
         if block_given?
           each_result do |result|

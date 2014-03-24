@@ -112,10 +112,12 @@ module PG
       #   Whenever there is a result error the iteration terminates immediately
       #   and the error is being raised.
       #   
-      #   @note Since Ruby 2.0 the #lazy enumerator may come in handy while
+      #   @note Since Ruby 2.0 the +lazy+ enumerator might come in handy while
       #         dealing with large datasets. Unfortunataley due to the bug:
-      #         https://bugs.ruby-lang.org/issues/9664 in MRI 2, this method
-      #         will not be usable until it is fixed.
+      #         {https://bugs.ruby-lang.org/issues/9664} this method
+      #         won't be usable in MRI 2 until it's fixed there. A workaround
+      #         is to use MRI 1.9.x and backbort lazy enumerator using
+      #         {https://github.com/marcandre/backports backports}.
       #   
       #   If EventMachine reactor is running and the current fiber isn't the
       #   root fiber this method performs command asynchronously transfering

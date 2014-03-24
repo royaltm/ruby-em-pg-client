@@ -114,11 +114,9 @@ module PG
       #  end
       #
       # @example Row streaming and aborting after 100 rows
-      #  pg.query_stream('select * from foo').tap do |iter|
-      #    iter.each_row.with_index do |row, index|
-      #      puts row.inspect
-      #      iter.stop if index >= 99
-      #    end
+      #  pg.query_stream('select * from foo').each_row.with_index do |row, index|
+      #    puts row.inspect
+      #    pg.stop_iterator if index >= 99
       #  end
       def query_stream(*args, &block)
         if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
