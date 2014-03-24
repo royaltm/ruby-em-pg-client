@@ -19,7 +19,6 @@ module PG
         if iter = @result_iterator
           @result_iterator = nil
           iter.stop_sync
-          iter
         end
       end
 

@@ -320,8 +320,9 @@ module PG
       # Clears any remaining result.
       # May be called in both blocking and asynchronous context,
       # inside or outside of +foreach+ handler safely.
+      # @return [self]
       def stop
-        return @stop if finished? || !client || @stop
+        return self if finished? || !client || @stop
         if ::EM.reactor_running?
           if @next.is_a?(::EM::Deferrable)
             @stop = ::PG::EM::FeaturedDeferrable.new
@@ -335,6 +336,7 @@ module PG
               callback { succeed :stop }.
               errback  {|e| fail e }
           end
+          self
         else
           begin
             client.reset
@@ -346,11 +348,11 @@ module PG
         end
       end
 
-      # Calls asynchronous #stop waiting for the reset to finish.
+      # Calls asynchronous #stop and waits for the reset to finish.
       #
       # May be called in both blocking and asynchronous context.
+      # @return [self]
       def stop_sync
-        return self if finished?
         if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
           sync stop, f
         else
