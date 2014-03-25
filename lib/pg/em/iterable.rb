@@ -3,11 +3,21 @@ require 'pg/em/iterator'
 require 'pg/em/tuple_iterator'
 module PG
   module EM
-
+    # Author:: Rafal Michalski
+    #
+    # @note This module is experimental
     module IterableMixin
 
+      # @!attribute [rw] result_iterator
+      #   @return [PG::EM::TupleIterator] iterator instance
+      #   Iterator object set by the last call to {#query_stream} or
+      #   {#query_stream_defer}
       attr_accessor :result_iterator
 
+      # Stop iterator from the previous {#query_stream} or
+      # {#query_stream_defer} command asynchronously.
+      # Returns iterator or nil if there wasn't any iterator.
+      # @return [PG::EM::TupleIterator|nil]
       def stop_iterator_defer
         if iter = @result_iterator
           @result_iterator = nil
@@ -109,12 +119,24 @@ module PG
       #
       # If a block is given the {TupleIterator#each} is called with the block.
       # In this instance the method doesn't return until the iteration
-      # is completed or interrupted.
+      # is completed or interrupted. When there are no more results the
+      # iteration terminates returning {TupleIterator}.
+      #
+      # Calling {#stop_iterator} will interrupt current query, reset the
+      # connection and terminate iteration. It is safe to call
+      # {#stop_iterator} or {#stop_iterator_defer} from inside of the
+      # iterator block. In this instance +:stop+ is returned.
+      #
+      # Returns +nil+ if +break+ is invoked form inside of the iterator block.
+      # In this instance it's possible to call {#result_iterator}+.each+ or any
+      # of its variants to retrieve the remaining results.
+      #
+      # Returns immediately a {TupleIterator} if block is not provided.
       #
       # May be called in both blocking and asynchronous context.
       #
       # @see PG::EM::TupleIterator#each PG::EM::TupleIterator#each
-      #      for explanation of block parameters and usage.
+      # @see PG::EM::TupleIterator#each_row PG::EM::TupleIterator#each_row
       #
       # @example Tuple streaming
       #  pg.query_stream('select * from foo') do |tuple|

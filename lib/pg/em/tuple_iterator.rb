@@ -1,9 +1,12 @@
 require 'pg/em/iterator'
 module PG
   module EM
-
+    # Author:: Rafal Michalski
+    #
     # This iterator is best served in a single_row_mode.
     # Used by {IterableMixin#query_stream_defer} and {IterableMixin#query_stream}.
+    #
+    # @note This class is experimental
     class TupleIterator < Iterator
       # Iterates asynchronously using the specified block or proc over each
       # first result tuple from a call to +Client#send_query+ (or another asynchronous
@@ -12,7 +15,7 @@ module PG
       #
       # @return [PG::EM::TupleIterator] - self
       #
-      # @yieldparam tuple [Hash] - first tuple from a single result
+      # @yieldparam tuple [Hash] - first tuple from each result
       # @yieldparam iter [PG::EM::Iterator] - iterator instance
       #
       # The block should invoke +iter.next+ when it's finished processing
@@ -39,7 +42,7 @@ module PG
       #
       # @return [PG::EM::TupleIterator] - self
       #
-      # @yieldparam row [Array] - first row from a single result
+      # @yieldparam row [Array] - first row from each result
       # @yieldparam iter [PG::EM::Iterator] - iterator instance
       #
       # The block should invoke +iter.next+ when it's finished processing
@@ -67,7 +70,7 @@ module PG
       #
       # @macro iterator_each_api
       #
-      # @yieldparam tuple [Hash] - first tuple from a single result
+      # @yieldparam tuple [Hash] - first tuple from each result
       #
       # @example Simple iteration
       #  pg.query_stream('select value from foo').each_with_index.map do |row, i|
@@ -114,10 +117,7 @@ module PG
       #
       # @macro iterator_each_api
       #
-      # @yieldparam row [Array] - first row from a single result
-      #
-      # @see #each_defer
-      # @see IterableMixin#query_stream
+      # @yieldparam row [Array] - first row from each result
       #
       # @example Simple iteration
       #  pg.query_stream('select value from foo').each_row.with_index.map do |row, i|

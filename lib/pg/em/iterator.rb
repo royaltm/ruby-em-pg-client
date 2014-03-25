@@ -9,6 +9,8 @@ module PG
     #
     # The +iterator+ is a deferrable itself and will receive a +succeeded+ status
     # upon completion of the iteration or +failed+ status on an error.
+    #
+    # @note This class is experimental
     class Iterator
       include DeferrableFeatures
       include Enumerable
