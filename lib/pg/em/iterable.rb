@@ -15,10 +15,18 @@ module PG
         end
       end
 
+      # Stop iterator from the previous {#query_stream} or
+      # {#query_stream_defer} command. Synchronize current
+      # fiber waiting for stop to complete.
+      # Returns :stop or nil if there wasn't any iterator.
+      # @return [:stop|nil]
+      # @raise [PG::Error]
       def stop_iterator
         if iter = @result_iterator
           @result_iterator = nil
-          iter.stop_sync
+          ret = iter.stop_sync
+          raise ret if ret.is_a?(Exception)
+          ret
         end
       end
 
