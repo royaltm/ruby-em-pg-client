@@ -399,4 +399,67 @@ shared_context 'em-pg common after' do
     end
   end
 
+  it "should receive notification while waiting for it" do
+    sender = described_class.new
+    sender_pid = nil
+    @client.query_defer('LISTEN "ruby-em-pg-client"') do |result|
+      result.should be_an_instance_of PG::Result
+      @client.wait_for_notify_defer do |notification|
+        notification.should be_an_instance_of Hash
+        notification[:relname].should eq 'ruby-em-pg-client'
+        notification[:be_pid].should eq sender_pid
+        notification[:extra].should eq 'foo'
+        @client.query_defer('UNLISTEN *') do |result|
+          result.should be_an_instance_of PG::Result
+          EM.stop
+        end
+      end.should be_a_kind_of ::EM::Deferrable
+      EM.next_tick do
+        sender.query_defer('SELECT pg_backend_pid()') do |result|
+          result.should be_an_instance_of PG::Result
+          sender_pid = result.getvalue(0,0).to_i
+          sender.query_defer(%q[NOTIFY "ruby-em-pg-client", 'foo']) do |result|
+            result.should be_an_instance_of PG::Result
+            sender.finish
+          end.should be_a_kind_of ::EM::Deferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end
+    end.should be_a_kind_of ::EM::Deferrable
+  end
+
+  it "should receive previously sent notification" do
+    @client.query_defer('LISTEN "ruby-em-pg-client"') do |result|
+      result.should be_an_instance_of PG::Result
+      @client.query_defer('SELECT pg_backend_pid()') do |result|
+        result.should be_an_instance_of PG::Result
+        sender_pid = result.getvalue(0,0).to_i
+        @client.query_defer(%q[NOTIFY "ruby-em-pg-client"]) do |result|
+          result.should be_an_instance_of PG::Result
+          @client.wait_for_notify_defer(1) do |notification|
+            notification.should be_an_instance_of Hash
+            notification[:relname].should eq 'ruby-em-pg-client'
+            notification[:be_pid].should eq sender_pid
+            notification[:extra].should eq ''
+            @client.query_defer('UNLISTEN *') do |result|
+              result.should be_an_instance_of PG::Result
+              EM.stop
+            end
+          end.should be_a_kind_of ::EM::Deferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+  end
+
+  it "should reach timeout while waiting for notification" do
+    start_time = Time.now
+    async_flag = false
+    @client.wait_for_notify_defer(0.2) do |notification|
+      notification.should be_nil
+      (Time.now - start_time).should be >= 0.2
+      async_flag.should be_true
+      EM.stop
+    end.should be_a_kind_of ::EM::Deferrable
+    async_flag = true
+  end
+
 end

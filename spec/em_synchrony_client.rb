@@ -336,6 +336,54 @@ describe PG::EM::Client do
     asynchronous.should be true
   end
 
+  it "should receive notification while waiting for it" do
+    sender = described_class.new
+    result = sender.query('SELECT pg_backend_pid()')
+    result.should be_an_instance_of PG::Result
+    sender_pid = result.getvalue(0,0).to_i
+    @client.query('LISTEN "ruby-em-pg-client"').should be_an_instance_of PG::Result
+    EM::Synchrony.next_tick do
+      sender.query(%q[NOTIFY "ruby-em-pg-client", 'foo']).should be_an_instance_of PG::Result
+      sender.finish
+    end
+    @client.wait_for_notify do |name, pid, payload|
+      name.should eq 'ruby-em-pg-client'
+      pid.should eq sender_pid
+      payload.should eq 'foo'
+      @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+      EM.stop
+    end
+  end
+
+  it "should receive previously sent notification" do
+    @client.query('LISTEN "ruby-em-pg-client"').should be_an_instance_of PG::Result
+    result = @client.query('SELECT pg_backend_pid()')
+    result.should be_an_instance_of PG::Result
+    sender_pid = result.getvalue(0,0).to_i
+    @client.query(%q[NOTIFY "ruby-em-pg-client", 'foo']).should be_an_instance_of PG::Result
+    @client.wait_for_notify(1) do |name, pid, payload|
+      name.should eq 'ruby-em-pg-client'
+      pid.should eq sender_pid
+      payload.should eq 'foo'
+      @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+      EM.stop
+    end
+  end
+
+  it "should reach timeout while waiting for notification" do
+    start_time = Time.now
+    async_flag = false
+    EM.next_tick do
+      async_flag = true
+    end
+    @client.wait_for_notify(0.2) do
+      raise "This block should not be called"
+    end.should be_nil
+    (Time.now - start_time).should be >= 0.2
+    async_flag.should be_true
+    EM.stop
+  end
+
   describe 'PG::EM::Client#transaction' do
 
     before(:all) do
