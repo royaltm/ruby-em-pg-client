@@ -939,7 +939,7 @@ module PG
       # @raise [PG::Error]
       #
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-wait_for_notify PG::Connection#wait_for_notify
-      def wait_for_notify(timeout = nil, &blk)
+      def wait_for_notify(timeout = nil)
         if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
           unless notify_hash = notifies
             if (notify_hash = fiber_sync wait_for_notify_defer(timeout), f).is_a?(::Exception)
@@ -953,7 +953,7 @@ module PG
             notify_hash[:relname]
           end
         else
-          blocking_wait_for_notify(timeout, &blk)
+          super
         end
       end
 

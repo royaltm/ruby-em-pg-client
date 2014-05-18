@@ -118,7 +118,7 @@ module PG
             self.notify_readable = false
             cancel_timer
             @send_proc = nil
-            @deferrable.succeed(result)
+            @deferrable.succeed result
           end
         end
 
