@@ -355,7 +355,7 @@ describe PG::EM::Client do
       payload.should eq (NOTIFY_PAYLOAD ? 'foo' : '')
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
       EM.stop
-    end
+    end.should eq 'ruby-em-pg-client'
   end
 
   it "should receive previously sent notification" do
@@ -370,7 +370,7 @@ describe PG::EM::Client do
       payload.should eq ''
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
       EM.stop
-    end
+    end.should eq 'ruby-em-pg-client'
   end
 
   it "should reach timeout while waiting for notification" do
