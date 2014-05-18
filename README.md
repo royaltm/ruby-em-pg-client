@@ -72,8 +72,9 @@ Features
   processing and transactions.
 * [Sequel Adapter](https://github.com/fl00r/em-pg-sequel) by Peter Yanovich.
 * Works on windows (requires ruby 2.0) ([issue #7][Issue 7]).
-* __New__ - supports asynchronous query data processing in single row mode
+* Supports asynchronous query data processing in single row mode
   ([issue #12][Issue 12]). See {file:BENCHMARKS.md BENCHMARKING}.
+* __New__ - asynchronous wait_for_notify
 
 Requirements
 ------------
@@ -360,16 +361,14 @@ The other reason was to get rid of the ugly em / em-synchrony duality.
 Bugs/Limitations
 ----------------
 
-* no async support for: COPY commands (`get_copy_data`,  `put_copy_data`),
-  `wait_for_notify`
+* no async support for COPY commands (`get_copy_data`,  `put_copy_data`)
 * actually no ActiveRecord support (you are welcome to contribute).
 
 TODO:
 -----
 
 * more convenient streaming API
-* implement EM adapted version of `get_copy_data`, `put_copy_data`,
-  `wait_for_notify` and `transaction`
+* implement EM adapted version of `get_copy_data`, `put_copy_data`
 * ORM (ActiveRecord and maybe Datamapper) support as separate projects
 
 More Info
