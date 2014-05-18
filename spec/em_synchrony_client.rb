@@ -5,6 +5,9 @@ require 'date'
 require 'em-synchrony'
 require 'pg/em'
 
+NOTIFY_PAYLOAD = defined?(PG.library_version) && PG.library_version >= 90000
+NOTIFY_PAYLOAD_QUERY = NOTIFY_PAYLOAD ? %q[NOTIFY "ruby-em-pg-client", 'foo'] : %q[NOTIFY "ruby-em-pg-client"]
+
 describe PG::EM::Client do
 
   it "should be client #{PG::VERSION}" do
@@ -343,13 +346,13 @@ describe PG::EM::Client do
     sender_pid = result.getvalue(0,0).to_i
     @client.query('LISTEN "ruby-em-pg-client"').should be_an_instance_of PG::Result
     EM::Synchrony.next_tick do
-      sender.query(%q[NOTIFY "ruby-em-pg-client", 'foo']).should be_an_instance_of PG::Result
+      sender.query(NOTIFY_PAYLOAD_QUERY).should be_an_instance_of PG::Result
       sender.finish
     end
     @client.wait_for_notify do |name, pid, payload|
       name.should eq 'ruby-em-pg-client'
       pid.should eq sender_pid
-      payload.should eq 'foo'
+      payload.should eq (NOTIFY_PAYLOAD ? 'foo' : '')
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
       EM.stop
     end
@@ -360,11 +363,11 @@ describe PG::EM::Client do
     result = @client.query('SELECT pg_backend_pid()')
     result.should be_an_instance_of PG::Result
     sender_pid = result.getvalue(0,0).to_i
-    @client.query(%q[NOTIFY "ruby-em-pg-client", 'foo']).should be_an_instance_of PG::Result
+    @client.query(%q[NOTIFY "ruby-em-pg-client"]).should be_an_instance_of PG::Result
     @client.wait_for_notify(1) do |name, pid, payload|
       name.should eq 'ruby-em-pg-client'
       pid.should eq sender_pid
-      payload.should eq 'foo'
+      payload.should eq ''
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
       EM.stop
     end

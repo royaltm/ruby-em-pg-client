@@ -1,3 +1,6 @@
+NOTIFY_PAYLOAD = defined?(PG.library_version) && PG.library_version >= 90000
+NOTIFY_PAYLOAD_QUERY = NOTIFY_PAYLOAD ? %q[NOTIFY "ruby-em-pg-client", 'foo'] : %q[NOTIFY "ruby-em-pg-client"]
+
 module PGSpecMacros
   def self.included(base)
     base.extend(ClassMethods)
@@ -408,7 +411,7 @@ shared_context 'em-pg common after' do
         notification.should be_an_instance_of Hash
         notification[:relname].should eq 'ruby-em-pg-client'
         notification[:be_pid].should eq sender_pid
-        notification[:extra].should eq 'foo'
+        notification[:extra].should eq (NOTIFY_PAYLOAD ? 'foo' : '')
         @client.query_defer('UNLISTEN *') do |result|
           result.should be_an_instance_of PG::Result
           EM.stop
@@ -418,7 +421,7 @@ shared_context 'em-pg common after' do
         sender.query_defer('SELECT pg_backend_pid()') do |result|
           result.should be_an_instance_of PG::Result
           sender_pid = result.getvalue(0,0).to_i
-          sender.query_defer(%q[NOTIFY "ruby-em-pg-client", 'foo']) do |result|
+          sender.query_defer(NOTIFY_PAYLOAD_QUERY) do |result|
             result.should be_an_instance_of PG::Result
             sender.finish
           end.should be_a_kind_of ::EM::Deferrable
