@@ -11,6 +11,7 @@ module PG
         def initialize(client)
           @client = client
           @is_connected = true
+          @readable_method = nil
         end
 
         def watching?
@@ -21,18 +22,35 @@ module PG
           @one_result_mode
         end
 
-        def watch_results(deferrable, send_proc=nil, one_result_mode=false)
+        def watch_results(deferrable, send_proc = nil, one_result_mode = false)
           @one_result_mode = one_result_mode
           @last_result = nil
           @deferrable = deferrable
           @send_proc = send_proc
           cancel_timer
+          @readable_method = :fetch_results
           self.notify_readable = true
           if (timeout = @client.query_timeout) > 0
             @notify_timestamp = Time.now
             setup_timer timeout
           end
           fetch_results
+        end
+
+        def watch_notifies(deferrable, timeout = nil)
+          @deferrable = deferrable
+          @send_proc = nil
+          cancel_timer
+          @readable_method = :fetch_notifies
+          self.notify_readable = true
+          if timeout
+            @timer = ::EM::Timer.new(timeout) do
+              @timer = nil
+              self.notify_readable = false
+              @deferrable.succeed
+            end
+          end
+          fetch_notifies
         end
 
         def setup_timer(timeout, adjustment = 0)
@@ -62,7 +80,15 @@ module PG
         rescue Exception => e
           handle_error(e)
         else
-          fetch_results
+          __send__ @readable_method
+        end
+
+        def fetch_notifies
+          if notify_hash = @client.notifies
+            self.notify_readable = false
+            cancel_timer
+            @deferrable.succeed notify_hash
+          end
         end
 
         # Carefully extract results without

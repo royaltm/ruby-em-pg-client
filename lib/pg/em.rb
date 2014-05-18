@@ -678,6 +678,34 @@ module PG
       alias_method :async_exec_defer,  :exec_defer
       alias_method :exec_params_defer, :exec_defer
 
+      # Asynchronously waits for notification(s) or until the optional
+      # +timeout+ is reached, whichever comes first. +timeout+ is
+      # measured in seconds and can be fractional.
+      # Returns immediately with a Deferrable.
+      #
+      # Pass the block to the returned deferrable's +callback+ to obtain notification
+      # hash. In case of connection error +errback+ hook is called with an error object.
+      # If the +timeout+ is reached +nil+ is passed to deferrable's +callback+.
+      # If the block is provided it's bound to both the +callback+ and +errback+ hooks
+      # of the returned deferrable.
+      #
+      # @return [FeaturedDeferrable]
+      # @yieldparam notification [Hash|nil|Error] notification hash or a PG::Error instance on error
+      #                                       or nil when timeout is reached.
+      #
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-notifies PG::Connection#notifies
+      def wait_for_notify_defer(timeout = nil, &blk)
+        df = FeaturedDeferrable.new(&blk)
+        begin
+          setup_emio_watcher.watch_notifies(df, timeout)
+        rescue Error => e
+          ::EM.next_tick { async_autoreconnect!(df, e) }
+        rescue Exception => e
+          ::EM.next_tick { df.fail(e) }
+        end
+        df
+      end
+
       # Asynchronously retrieves the next result from a call to
       # #send_query (or another asynchronous command) and immediately
       # returns with a Deferrable.
@@ -744,6 +772,7 @@ module PG
 
       # @!endgroup
 
+      alias_method :blocking_wait_for_notify, :wait_for_notify
       alias_method :blocking_get_result, :get_result
 
       def raise_error(klass=Error, message=error_message)
@@ -891,6 +920,42 @@ module PG
       alias_method :query,       :exec
       alias_method :async_query, :exec
       alias_method :async_exec,  :exec
+
+      # Blocks while waiting for notification(s), or until the optional
+      # +timeout+ is reached, whichever comes first.
+      # Returns +nil+ if +timeout+ is reached, the name of the +NOTIFY+
+      # event otherwise.
+      #
+      # If EventMachine reactor is running and the current fiber isn't the
+      # root fiber this method performs command asynchronously yielding
+      # current fiber. Other fibers can process while the current one is
+      # waiting for notifications.
+      #
+      # Otherwise performs a blocking call to a parent method.
+      # @return [String|nil]
+      # @yieldparam name [String] the name of the +NOTIFY+ event
+      # @yieldparam pid [Number] the generating pid
+      # @yieldparam payload [String] the optional payload
+      # @raise [PG::Error]
+      #
+      # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-wait_for_notify PG::Connection#wait_for_notify
+      def wait_for_notify(timeout = nil, &blk)
+        if ::EM.reactor_running? && !(f = Fiber.current).equal?(ROOT_FIBER)
+          unless notify_hash = notifies
+            if (notify_hash = fiber_sync wait_for_notify_defer(timeout), f).is_a?(::Exception)
+              raise notify_hash
+            end
+          end
+          if notify_hash
+            if block_given?
+              yield notify_hash.values_at(:relname, :be_pid, :extra)
+            end
+            notify_hash[:relname]
+          end
+        else
+          blocking_wait_for_notify(timeout, &blk)
+        end
+      end
 
       # Retrieves the next result from a call to #send_query (or another
       # asynchronous command). If no more results are available returns
