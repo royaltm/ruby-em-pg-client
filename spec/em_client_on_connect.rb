@@ -52,8 +52,8 @@ shared_context 'test on_connect' do
             client.exec_prepared_defer(query_name) do |result|
               result.should be_an_instance_of PG::Result
               result[0]['pg_database_size'].to_i.should be > 0
+              EM.stop
             end.should be_a_kind_of ::EM::Deferrable
-            EM.stop
           end.should be_a_kind_of ::EM::Deferrable
         end.should be_a_kind_of ::EM::Deferrable
       end.should be_a_kind_of ::EM::Deferrable
