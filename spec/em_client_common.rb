@@ -543,7 +543,7 @@ shared_context 'em-pg common after' do
     end
   end
 
-  it "should fail wait_for_notify on connection resets" do
+  it "should fail wait_for_notify on connection reset" do
     @client.status.should be PG::CONNECTION_OK
     visit_counter = 0
     pg_exec_and_check_with_error(@client, false,
@@ -564,7 +564,7 @@ shared_context 'em-pg common after' do
     (visit_counter+=1).should eq 1
   end
 
-  it "should fail wait_for_notify and slow query on connection resets" do
+  it "should fail wait_for_notify and slow query on connection reset" do
     @client.status.should be PG::CONNECTION_OK
     visit_counter = 0
     pg_exec_and_check_with_error(@client, false,
@@ -594,6 +594,26 @@ shared_context 'em-pg common after' do
         :query_defer, 'SELECT pg_sleep(10)') do
       (visit_counter+=1).should eq 4
     end
+  end
+
+  it "should fail wait_for_notify on another wait_for_notify" do
+    @client.status.should be PG::CONNECTION_OK
+    visit_counter = 0
+    @client.wait_for_notify_defer(0.5).errback do |ex|
+      ex.should be_nil
+      (visit_counter+=1).should eq 2
+    end.callback do
+      raise "This should never be called"
+    end.should be_a_kind_of ::EM::Deferrable
+    (visit_counter+=1).should eq 1
+    @client.wait_for_notify_defer(0.1).callback do |notification|
+      notification.should be_nil
+      (visit_counter+=1).should eq 4
+      EM.stop
+    end.errback do
+      raise "This should never be called"
+    end.should be_a_kind_of ::EM::Deferrable
+    (visit_counter+=1).should eq 3
   end
 
 end

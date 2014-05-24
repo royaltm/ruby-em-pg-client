@@ -686,7 +686,7 @@ module PG
       alias_method :async_exec_defer,  :exec_defer
       alias_method :exec_params_defer, :exec_defer
 
-      # Asynchronously waits for notification(s) or until the optional
+      # Asynchronously waits for notification or until the optional
       # +timeout+ is reached, whichever comes first. +timeout+ is
       # measured in seconds and can be fractional.
       # Returns immediately with a Deferrable.
@@ -696,10 +696,13 @@ module PG
       # If the +timeout+ is reached +nil+ is passed to deferrable's +callback+.
       # If the block is provided it's bound to both the +callback+ and +errback+ hooks
       # of the returned deferrable.
+      # If another call is made to this method before the notification is received
+      # (or before reaching timeout) the previous deferrable's +errback+ will be called
+      # with +nil+ argument.
       #
       # @return [FeaturedDeferrable]
       # @yieldparam notification [Hash|nil|Error] notification hash or a PG::Error instance on error
-      #                                       or nil when timeout is reached.
+      #                                       or nil when timeout is reached or canceled.
       #
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-notifies PG::Connection#notifies
       def wait_for_notify_defer(timeout = nil, &blk)

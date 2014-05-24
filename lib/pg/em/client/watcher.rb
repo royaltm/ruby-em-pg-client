@@ -41,6 +41,7 @@ module PG
         end
 
         def watch_notify(deferrable, timeout = nil)
+          notify_df = @notify_deferrable
           @notify_deferrable = deferrable
           cancel_notify_timer
           self.notify_readable = true unless notify_readable?
@@ -50,6 +51,7 @@ module PG
               succeed_notify
             end
           end
+          notify_df.fail nil if notify_df
           check_notify
         end
 
@@ -180,7 +182,7 @@ module PG
           self.notify_readable = false unless notify_df
           if e.is_a?(PG::Error)
             @client.async_autoreconnect!(df, e, send_proc) do
-              # there was a connection error so stop any activity
+              # there was a connection error so stop any remaining activity
               if notify_df
                 @notify_deferrable = nil
                 cancel_notify_timer

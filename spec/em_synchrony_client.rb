@@ -490,7 +490,7 @@ describe PG::EM::Client do
     @client.reset
   end
 
-  it "should fail wait_for_notify on connection resets" do
+  it "should fail wait_for_notify on connection reset" do
     @client.status.should be PG::CONNECTION_OK
     visit_counter = 0
     Fiber.new do
@@ -505,7 +505,7 @@ describe PG::EM::Client do
     (visit_counter+=1).should eq 2
   end
 
-  it "should fail wait_for_notify and slow query on connection resets" do
+  it "should fail wait_for_notify and slow query on connection reset" do
     @client.status.should be PG::CONNECTION_OK
     visit_counter = 0
     Fiber.new do
