@@ -74,7 +74,7 @@ Features
 * Works on windows (requires ruby 2.0) ([issue #7][Issue 7]).
 * Supports asynchronous query data processing in single row mode
   ([issue #12][Issue 12]). See {file:BENCHMARKS.md BENCHMARKING}.
-* __New__ - asynchronous wait_for_notify
+* __New__ - asynchronous implementation of wait_for_notify
 
 Requirements
 ------------
@@ -261,6 +261,52 @@ to enable this feature call:
 Additionally the `on_autoreconnect` callback may be set on the connection.
 It's being invoked after successfull connection restart, just before the
 pending command is sent again to the server.
+
+### Server-sent notifications - async style
+
+Not surprisingly, there are two possible ways to wait for notifications,
+one with a deferrable:
+
+```ruby
+  pg = PG::EM::Client.new
+  EM.run do
+    pg.wait_for_notify_defer(7).callback do |notify|
+      if notify
+        puts "Someone spoke to us on channel: #{notify[:relname]} from #{notify[:be_pid]}"
+      else
+        puts "Too late, 7 seconds passed"
+      end
+    end.errback do |ex|
+      puts "Connection to deep space lost..."
+    end
+    pg.query_defer("LISTEN deep_space") do
+      pg.query_defer("NOTIFY deep_space") do
+        puts "Reaching out... to the other worlds"
+      end
+    end
+  end
+```
+
+and the other, using fibers:
+
+```ruby
+  EM.synchrony do
+    pg = PG::EM::Client.new
+    EM::Synchrony.next_tick do
+      pg.query('LISTEN "some channel"')
+      pg.query('SELECT pg_notify($1::text,$2::text)', ['some channel', 'with some message'])
+    end
+    pg.wait_for_notify(10) do |channel, pid, payload|
+      puts "I've got notification on #{channel} #{payload}."
+    end.tap do |name|
+      puts "Whatever, I've been waiting too long already" if name.nil?
+    end
+  end
+```
+
+As you might have noticed, one does not simply wait for notifications,
+but one can also run some queries on the same connection at the same time,
+if one wishes so.
 
 ### Connection Pool
 
