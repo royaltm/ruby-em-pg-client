@@ -653,7 +653,7 @@ module PG
 
         class_eval <<-EOD, __FILE__, __LINE__
         def #{defer_name}(*args, &blk)
-          df = FeaturedDeferrable.new(&blk)
+          df = FeaturedDeferrable.new
           send_proc = proc do
             #{send_name}(*args)
             setup_emio_watcher.watch_results(df, send_proc)
@@ -667,6 +667,7 @@ module PG
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }
           end
+          df.completion(&blk) if block_given?
           df
         end
         EOD
@@ -695,7 +696,7 @@ module PG
       #
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-notifies PG::Connection#notifies
       def wait_for_notify_defer(timeout = nil, &blk)
-        df = FeaturedDeferrable.new(&blk)
+        df = FeaturedDeferrable.new
         begin
           setup_emio_watcher.watch_notifies(df, timeout)
         rescue Error => e
@@ -703,6 +704,7 @@ module PG
         rescue Exception => e
           ::EM.next_tick { df.fail(e) }
         end
+        df.completion(&blk) if block_given?
         df
       end
 
@@ -720,11 +722,10 @@ module PG
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_result PG::Connection#get_result
       #
       def get_result_defer(&blk)
+        df = FeaturedDeferrable.new
         begin
-          df = FeaturedDeferrable.new(&blk)
           if status == CONNECTION_OK
             if is_busy
-              check_async_command_aborted!
               setup_emio_watcher.watch_results(df, nil, true)
             else
               df.succeed blocking_get_result
@@ -737,6 +738,7 @@ module PG
         rescue Exception => e
           ::EM.next_tick { df.fail(e) }
         end
+        df.completion(&blk) if block_given?
         df
       end
 
@@ -754,10 +756,9 @@ module PG
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-i-get_last_result PG::Connection#get_last_result
       #
       def get_last_result_defer(&blk)
+        df = FeaturedDeferrable.new
         begin
-          df = FeaturedDeferrable.new(&blk)
           if status == CONNECTION_OK
-            check_async_command_aborted!
             setup_emio_watcher.watch_results(df)
           else
             df.succeed
@@ -767,6 +768,7 @@ module PG
         rescue Exception => e
           ::EM.next_tick { df.fail(e) }
         end
+        df.completion(&blk) if block_given?
         df
       end
 
