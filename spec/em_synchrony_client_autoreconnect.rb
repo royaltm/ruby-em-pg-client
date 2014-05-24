@@ -64,7 +64,7 @@ describe 'em-synchrony-pg default autoreconnect' do
   end
 
   it "should fail to get last result asynchronously after server restart" do
-    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     expect do
@@ -76,7 +76,7 @@ describe 'em-synchrony-pg default autoreconnect' do
   end
 
   it "should fail to get each result asynchronously after server restart" do
-    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     result = @client.get_result
@@ -204,7 +204,7 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
     @client.on_autoreconnect = proc {
       EM::DefaultDeferrable.new.tap {|df| df.succeed }
     }
-    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     expect do
@@ -217,7 +217,7 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
 
   it "should fail to get each result asynchronously after server restart" do
     @client.on_autoreconnect = proc { true }
-    @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+    @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     result = @client.get_result
@@ -395,7 +395,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     begin
-      @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+      @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     rescue PG::UnableToSend
       @client.status.should be PG::CONNECTION_BAD
       @client.get_last_result.should be_nil
@@ -416,7 +416,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     system($pgserver_cmd_stop).should be_true
     system($pgserver_cmd_start).should be_true
     begin
-      @client.send_query('SELECT pg_sleep(5); SELECT pg_database_size(current_database());')
+      @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     rescue PG::UnableToSend
       @client.status.should be PG::CONNECTION_BAD
       @client.get_result.should be_nil
