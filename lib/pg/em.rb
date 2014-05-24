@@ -698,7 +698,12 @@ module PG
       def wait_for_notify_defer(timeout = nil, &blk)
         df = FeaturedDeferrable.new
         begin
-          setup_emio_watcher.watch_notifies(df, timeout)
+          check_async_command_aborted!
+          if status == CONNECTION_OK
+            setup_emio_watcher.watch_notify(df, timeout)
+          else
+            raise_error ConnectionBad
+          end
         rescue Error => e
           ::EM.next_tick { async_autoreconnect!(df, e) }
         rescue Exception => e
