@@ -181,17 +181,19 @@ describe 'connection pool' do
     end
 
     it 'should lock transaction connection to fiber' do
+      over_count = 2
       @pool.transaction do |pg|
         @pool.hold {|c| c.should be pg }
         Fiber.new do
           @pool.size.should eq 1
           @pool.hold {|c| c.should_not be pg }
           @pool.size.should eq 2
-          EM.stop
+          EM.stop if (over_count-=1).zero?
         end.resume
         @pool.hold {|c| c.should be pg }
         @pool.size.should eq 2
       end
+      EM.stop if (over_count-=1).zero?
     end
 
   end
