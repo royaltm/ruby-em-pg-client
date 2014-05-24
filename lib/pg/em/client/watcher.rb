@@ -11,7 +11,11 @@ module PG
         def initialize(client)
           @client = client
           @is_connected = true
-          @readable_method = nil
+          @one_result_mode = false
+          @deferrable = nil
+          @notify_deferrable = nil
+          @timer = nil
+          @notify_timer = nil
         end
 
         def watching?
@@ -28,43 +32,52 @@ module PG
           @deferrable = deferrable
           @send_proc = send_proc
           cancel_timer
-          @readable_method = :fetch_results
-          self.notify_readable = true
+          self.notify_readable = true unless notify_readable?
           if (timeout = @client.query_timeout) > 0
-            @notify_timestamp = Time.now
+            @readable_timestamp = Time.now
             setup_timer timeout
           end
           fetch_results
         end
 
-        def watch_notifies(deferrable, timeout = nil)
-          @deferrable = deferrable
-          @send_proc = nil
-          cancel_timer
-          @readable_method = :fetch_notifies
-          self.notify_readable = true
+        def watch_notify(deferrable, timeout = nil)
+          @notify_deferrable = deferrable
+          cancel_notify_timer
+          self.notify_readable = true unless notify_readable?
           if timeout
-            @timer = ::EM::Timer.new(timeout) do
-              @timer = nil
-              self.notify_readable = false
-              @deferrable.succeed
+            @notify_timer = ::EM::Timer.new(timeout) do
+              @notify_timer = nil
+              succeed_notify
             end
           end
-          fetch_notifies
+          check_notify
         end
 
         def setup_timer(timeout, adjustment = 0)
           @timer = ::EM::Timer.new(timeout - adjustment) do
-            if (last_interval = Time.now - @notify_timestamp) >= timeout
+            if (last_interval = Time.now - @readable_timestamp) >= timeout
               @timer = nil
+              cancel_notify_timer
               self.notify_readable = false
               @client.async_command_aborted = true
-              @deferrable.protect do
+              @send_proc = nil
+              begin
                 @client.raise_error ConnectionBad, "query timeout expired (async)"
+              rescue Exception => e
+                fail_result e
+                # notify should also fail: query timeout is like connection error
+                fail_notify e
               end
             else
               setup_timer timeout, last_interval
             end
+          end
+        end
+
+        def cancel_notify_timer
+          if @notify_timer
+            @notify_timer.cancel
+            @notify_timer = nil
           end
         end
 
@@ -78,16 +91,16 @@ module PG
         def notify_readable
           @client.consume_input
         rescue Exception => e
-          handle_error(e)
+          handle_error e
         else
-          __send__ @readable_method
+          fetch_results if @deferrable
+          check_notify if @notify_deferrable
         end
 
-        def fetch_notifies
+        def check_notify
           if notify_hash = @client.notifies
-            self.notify_readable = false
-            cancel_timer
-            @deferrable.succeed notify_hash
+            cancel_notify_timer
+            succeed_notify notify_hash
           end
         end
 
@@ -110,40 +123,75 @@ module PG
             @last_result = single_result
           end
         rescue Exception => e
-          handle_error(e)
+          handle_error e
         else
           if result == false
-            @notify_timestamp = Time.now if @timer
+            @readable_timestamp = Time.now if @timer
           else
-            self.notify_readable = false
             cancel_timer
-            @send_proc = nil
-            @deferrable.succeed result
+            self.notify_readable = false unless @notify_deferrable
+            df = @deferrable
+            @deferrable = @send_proc = nil
+            df.succeed result
           end
         end
 
         def unbind
           @is_connected = false
-          @deferrable.protect do
-            cancel_timer
+          cancel_timer
+          cancel_notify_timer
+          if @deferrable || @notify_deferrable
             @client.raise_error ConnectionBad, "connection reset"
-          end if @deferrable
+          end
+        rescue Exception => e
+          fail_result e
+          fail_notify e
         end
 
         private
 
+        def fail_result(e)
+          df = @deferrable
+          @deferrable = nil
+          df.fail e if df
+        end
+
+        def succeed_notify(notify_hash = nil)
+          self.notify_readable = false unless @deferrable
+          df = @notify_deferrable
+          @notify_deferrable = nil
+          df.succeed notify_hash
+        end
+
+        def fail_notify(e)
+          df = @notify_deferrable
+          @notify_deferrable = nil
+          df.fail e if df
+        end
+
         def handle_error(e)
-          self.notify_readable = false
           cancel_timer
           send_proc = @send_proc
           @send_proc = nil
-          df = @deferrable
+          df = @deferrable || FeaturedDeferrable.new
           # prevent unbind error on auto re-connect
-          @deferrable = false
+          @deferrable = nil
+          notify_df = @notify_deferrable
+          self.notify_readable = false unless notify_df
           if e.is_a?(PG::Error)
-            @client.async_autoreconnect!(df, e, &send_proc)
+            @client.async_autoreconnect!(df, e, send_proc) do
+              # there was a connection error so stop any activity
+              if notify_df
+                @notify_deferrable = nil
+                cancel_notify_timer
+                self.notify_readable = false
+                # fail notify_df after deferrable completes
+                # handler might setup listen again then immediately
+                df.completion { notify_df.fail e }
+              end
+            end
           else
-            df.fail(e)
+            df.fail e
           end
         end
 
