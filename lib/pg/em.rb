@@ -723,6 +723,8 @@ module PG
         df
       end
 
+      alias_method :notifies_wait_defer, :wait_for_notify_defer
+
       # Asynchronously retrieves the next result from a call to
       # #send_query (or another asynchronous command) and immediately
       # returns with a Deferrable.
@@ -973,6 +975,8 @@ module PG
           super
         end
       end
+
+      alias_method :notifies_wait, :wait_for_notify
 
       # Retrieves the next result from a call to #send_query (or another
       # asynchronous command). If no more results are available returns
