@@ -352,7 +352,7 @@ module PG
       #
       # @see http://deveiate.org/code/pg/PG/Connection.html#method-c-new PG::Connection.new
       def self.connect_defer(*args, &blk)
-        df = PG::EM::FeaturedDeferrable.new(&blk)
+        df = FeaturedDeferrable.new(&blk)
         async_args = parse_async_options(args)
         conn = df.protect { connect_start(*args) }
         if conn
