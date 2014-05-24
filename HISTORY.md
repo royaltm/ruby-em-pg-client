@@ -1,3 +1,8 @@
+0.3.4
+
+- spec: fix em_client_on_connect and em_connection_pool tests
+- asynchronous wait_for_notify and wait_for_notify_defer with specs
+
 0.3.3
 
 - rake: console for debugging
