@@ -523,70 +523,77 @@ module PG
 
       # @!visibility private
       # Perform auto re-connect. Used internally.
-      def async_autoreconnect!(deferrable, error, &send_proc)
+      def async_autoreconnect!(deferrable, error, send_proc = nil, &on_connection_bad)
         # reconnect only if connection is bad and flag is set
-        if self.status == CONNECTION_BAD && async_autoreconnect
-          # check if transaction was active
-          was_in_transaction = case @last_transaction_status
-          when PQTRANS_IDLE, PQTRANS_UNKNOWN
-            false
-          else
-            true
-          end
-          # reset asynchronously
-          reset_df = reset_defer
-          # just fail on reset failure
-          reset_df.errback { |ex| deferrable.fail ex }
-          # reset succeeds
-          reset_df.callback do
-            # handle on_autoreconnect
-            if on_autoreconnect
-              # wrap in a fiber, so on_autoreconnect code may yield from it
-              Fiber.new do
-                # call on_autoreconnect handler and fail if it raises an error
-                returned_df = begin
-                  on_autoreconnect.call(self, error)
-                rescue => ex
-                  ex
-                end
-                if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
-                  # the handler returned a deferrable
-                  returned_df.callback do
-                    if was_in_transaction || !send_proc
-                      # there was a transaction in progress, fail anyway
-                      deferrable.fail error
-                    else
-                      # try to call failed query command again
-                      deferrable.protect(&send_proc)
-                    end
-                  end
-                  # fail when handler's deferrable fails
-                  returned_df.errback { |ex| deferrable.fail ex }
-                elsif returned_df.is_a?(Exception)
-                  # tha handler returned an exception object, so fail with it
-                  deferrable.fail returned_df
-                elsif returned_df == false || !send_proc || (was_in_transaction && returned_df != true)
-                  # tha handler returned false or raised an exception
-                  # or there was an active transaction and handler didn't return true
-                  deferrable.fail error
-                else
-                  # try to call failed query command again
-                  deferrable.protect(&send_proc)
-                end
-              end.resume
-            elsif was_in_transaction || !send_proc
-              # there was a transaction in progress, fail anyway
-              deferrable.fail error
+        if self.status == CONNECTION_BAD
+
+          yield if block_given?
+
+          if async_autoreconnect
+            # check if transaction was active
+            was_in_transaction = case @last_transaction_status
+            when PQTRANS_IDLE, PQTRANS_UNKNOWN
+              false
             else
-              # no on_autoreconnect handler, no transaction, then
-              # try to call failed query command again
-              deferrable.protect(&send_proc)
+              true
             end
+            # reset asynchronously
+            reset_df = reset_defer
+            # just fail on reset failure
+            reset_df.errback { |ex| deferrable.fail ex }
+            # reset succeeds
+            reset_df.callback do
+              # handle on_autoreconnect
+              if on_autoreconnect
+                # wrap in a fiber, so on_autoreconnect code may yield from it
+                Fiber.new do
+                  # call on_autoreconnect handler and fail if it raises an error
+                  returned_df = begin
+                    on_autoreconnect.call(self, error)
+                  rescue => ex
+                    ex
+                  end
+                  if returned_df.respond_to?(:callback) && returned_df.respond_to?(:errback)
+                    # the handler returned a deferrable
+                    returned_df.callback do
+                      if was_in_transaction || !send_proc
+                        # fail anyway, there was a transaction in progress or in single result mode
+                        deferrable.fail error
+                      else
+                        # try to call failed query command again
+                        deferrable.protect(&send_proc)
+                      end
+                    end
+                    # fail when handler's deferrable fails
+                    returned_df.errback { |ex| deferrable.fail ex }
+                  elsif returned_df.is_a?(Exception)
+                    # tha handler returned an exception object, so fail with it
+                    deferrable.fail returned_df
+                  elsif returned_df == false || !send_proc || (was_in_transaction && returned_df != true)
+                    # tha handler returned false or in single result mode
+                    # or there was an active transaction and handler didn't return true
+                    deferrable.fail error
+                  else
+                    # try to call failed query command again
+                    deferrable.protect(&send_proc)
+                  end
+                end.resume
+              elsif was_in_transaction || !send_proc
+                # there was a transaction in progress or in single result mode;
+                # fail anyway
+                deferrable.fail error
+              else
+                # no on_autoreconnect handler, no transaction
+                # try to call failed query command again
+                deferrable.protect(&send_proc)
+              end
+            end
+            # connection is bad, reset in progress, all done
+            return
           end
-        else
-          # connection is good, or the async_autoreconnect is not set
-          deferrable.fail error
         end
+        # connection is either good or bad, the async_autoreconnect is not set
+        deferrable.fail error
       end
 
       # @!macro deferrable_api
@@ -663,7 +670,7 @@ module PG
             @last_transaction_status = transaction_status
             send_proc.call
           rescue Error => e
-            ::EM.next_tick { async_autoreconnect!(df, e, &send_proc) }
+            ::EM.next_tick { async_autoreconnect!(df, e, send_proc) }
           rescue Exception => e
             ::EM.next_tick { df.fail(e) }
           end
