@@ -93,6 +93,72 @@ describe 'em-synchrony-pg default autoreconnect' do
     EM.stop
   end
 
+  it "should fail wait_for_notify while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    f = Fiber.current
+    notify_flag = false
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      @client.status.should be PG::CONNECTION_OK
+      Fiber.new do
+        @client.wait_for_notify do |name,|
+          name.should eq 'em_synchrony_client_autoreconnect'
+          notify_flag = true
+        end.should eq 'em_synchrony_client_autoreconnect'
+        @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+        f.resume
+      end.resume
+      @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+      @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+    end.resume
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    Fiber.yield
+    notify_flag.should be_true
+  end
+
+  it "should fail wait_for_notify and finish slow query while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    f = Fiber.current
+    notify_flag = false
+    query_flag = false
+    start_time = Time.now
+    Fiber.new do
+      result = @client.query('SELECT pg_sleep(2); SELECT 42')
+      result.should be_an_instance_of PG::Result
+      result.getvalue(0,0).to_i.should eq 42
+      (Time.now - start_time).should be > 2
+      query_flag = true
+    end.resume
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      query_flag.should be_true
+      @client.status.should be PG::CONNECTION_OK
+      Fiber.new do
+        @client.wait_for_notify do |name,|
+          name.should eq 'em_synchrony_client_autoreconnect'
+          notify_flag = true
+        end.should eq 'em_synchrony_client_autoreconnect'
+        @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+        f.resume
+      end.resume
+      @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+      @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+    end.resume
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    Fiber.yield
+    notify_flag.should be_true
+  end
+
   before(:all) do
     @tested_proc = proc do
       @client.query('SELECT pg_database_size(current_database());') do |result|
@@ -166,6 +232,76 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
     @client.status.should be PG::CONNECTION_OK
     @client.get_result.should be_nil
     EM.stop
+  end
+
+  it "should fail wait_for_notify while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.on_autoreconnect(&@on_autoreconnect)
+    f = Fiber.current
+    notify_flag = false
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      @client.status.should be PG::CONNECTION_OK
+      Fiber.new do
+        @client.wait_for_notify do |name,|
+          name.should eq 'em_synchrony_client_autoreconnect'
+          notify_flag = true
+        end.should eq 'em_synchrony_client_autoreconnect'
+        @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+        f.resume
+      end.resume
+      @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+      @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+    end.resume
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    Fiber.yield
+    notify_flag.should be_true
+    @tested_proc.call
+  end
+
+  it "should fail wait_for_notify and finish slow query while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.on_autoreconnect = @on_autoreconnect
+    f = Fiber.current
+    notify_flag = false
+    query_flag = false
+    start_time = Time.now
+    Fiber.new do
+      result = @client.query('SELECT pg_sleep(2); SELECT 42')
+      result.should be_an_instance_of PG::Result
+      result.getvalue(0,0).to_i.should eq 42
+      (Time.now - start_time).should be > 2
+      query_flag = true
+    end.resume
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      query_flag.should be_true
+      @client.status.should be PG::CONNECTION_OK
+      Fiber.new do
+        @client.wait_for_notify do |name,|
+          name.should eq 'em_synchrony_client_autoreconnect'
+          notify_flag = true
+        end.should eq 'em_synchrony_client_autoreconnect'
+        @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+        f.resume
+      end.resume
+      @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+      @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+    end.resume
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    Fiber.yield
+    notify_flag.should be_true
+    @tested_proc.call
   end
 
   it "should execute on_connect before on_autoreconnect after server restart" do
@@ -302,6 +438,113 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
     @client.status.should be PG::CONNECTION_OK
     @client.get_result.should be_nil
     EM.stop
+  end
+
+  it "should fail wait_for_notify while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    f = Fiber.current
+    notify_flag = false
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      @client.status.should be PG::CONNECTION_BAD
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      @client.status.should be PG::CONNECTION_BAD
+      @client.reset
+      @client.status.should be PG::CONNECTION_OK
+      Fiber.new do
+        @client.wait_for_notify do |name,|
+          name.should eq 'em_synchrony_client_autoreconnect'
+          notify_flag = true
+        end.should eq 'em_synchrony_client_autoreconnect'
+        @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+        f.resume
+      end.resume
+      @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+      @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+    end.resume
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    Fiber.yield
+    notify_flag.should be_true
+  end
+
+  it "should fail both wait_for_notify and slow query while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    f = Fiber.current
+    notify_flag = false
+    query_flag = false
+    Fiber.new do
+      expect {
+        @client.query('SELECT pg_sleep(2); SELECT 42')
+      }.to raise_error(PG::ConnectionBad)
+      query_flag = true
+    end.resume
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      query_flag.should be_true
+      @client.status.should be PG::CONNECTION_BAD
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad)
+      @client.status.should be PG::CONNECTION_BAD
+      expect {
+        @client.query('SELECT 1')
+      }.to raise_error(PG::UnableToSend)
+      @client.reset
+      @client.status.should be PG::CONNECTION_OK
+      Fiber.new do
+        @client.wait_for_notify do |name,|
+          name.should eq 'em_synchrony_client_autoreconnect'
+          notify_flag = true
+        end.should eq 'em_synchrony_client_autoreconnect'
+        @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+        f.resume
+      end.resume
+      @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+      @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
+    end.resume
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+    Fiber.yield
+    notify_flag.should be_true
+  end
+
+  it "should fail wait_for_notify when server was shutdown" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.wait_for_notify(0.1) do
+      raise "This block should not be called"
+    end.should be_nil
+    system($pgserver_cmd_stop).should be_true
+    expect {
+      @client.wait_for_notify do
+        raise "This block should not be called"
+      end
+    }.to raise_error(PG::ConnectionBad)
+    @client.status.should be PG::CONNECTION_BAD
+    expect {
+      @client.wait_for_notify do
+        raise "This block should not be called"
+      end
+    }.to raise_error(PG::ConnectionBad)
+    @client.status.should be PG::CONNECTION_BAD
+    system($pgserver_cmd_start).should be_true
+    @client.status.should be PG::CONNECTION_BAD
+    @client.reset
+    @client.status.should be PG::CONNECTION_OK
   end
 
   before(:all) do

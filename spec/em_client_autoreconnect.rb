@@ -12,7 +12,9 @@ DISCONNECTED_ERROR = ENV['PGHOST'].include?('/') ? PG::UnableToSend : PG::Connec
 
 shared_context 'pg-em common' do
   around(:each) do |testcase|
-    EM.run(&testcase)
+    EM.run do
+      EM.stop if testcase.call.is_a? Exception
+    end
   end
 
   after(:all) do
@@ -133,6 +135,63 @@ describe 'pg-em default autoreconnect' do
         end.should be_a_kind_of ::EM::Deferrable
       end.should be_a_kind_of ::EM::Deferrable
     end
+  end
+
+  it "should fail wait_for_notify while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.wait_for_notify_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_OK
+      @client.wait_for_notify_defer do |notification|
+        notification.should be_an_instance_of Hash
+        notification[:relname].should eq 'em_client_autoreconnect'
+        @client.query_defer('UNLISTEN *') do |result|
+          result.should be_an_instance_of PG::Result
+          EM.stop
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+      @client.query_defer('LISTEN em_client_autoreconnect') do |result|
+        result.should be_an_instance_of PG::Result
+        @client.query_defer('NOTIFY em_client_autoreconnect') do |result|
+          result.should be_an_instance_of PG::Result
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+  end
+
+  it "should fail wait_for_notify and finish slow query while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    start_time = Time.now
+    query_flag = false
+    @client.query_defer('SELECT pg_sleep(2); SELECT 42') do |result|
+      result.should be_an_instance_of PG::Result
+      result.getvalue(0,0).to_i.should eq 42
+      (Time.now - start_time).should be > 2
+      query_flag = true
+    end.should be_a_kind_of ::EM::Deferrable
+    @client.wait_for_notify_defer do |ex|
+      query_flag.should be_true
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_OK
+      @client.wait_for_notify_defer do |notification|
+        notification.should be_an_instance_of Hash
+        notification[:relname].should eq 'em_client_autoreconnect'
+        @client.query_defer('UNLISTEN *') do |result|
+          result.should be_an_instance_of PG::Result
+          EM.stop
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+      @client.query_defer('LISTEN em_client_autoreconnect') do |result|
+        result.should be_an_instance_of PG::Result
+        @client.query_defer('NOTIFY em_client_autoreconnect') do |result|
+          result.should be_an_instance_of PG::Result
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
   end
 
   before(:all) do
@@ -285,6 +344,65 @@ describe 'pg-em autoreconnect with on_autoreconnect' do
     end
   end
 
+  it "should fail wait_for_notify while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.on_autoreconnect(&@on_autoreconnect)
+    @client.wait_for_notify_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_OK
+      @client.wait_for_notify_defer do |notification|
+        notification.should be_an_instance_of Hash
+        notification[:relname].should eq 'em_client_autoreconnect'
+        @client.query_defer('UNLISTEN *') do |result|
+          result.should be_an_instance_of PG::Result
+          @tested_proc.call
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+      @client.query_defer('LISTEN em_client_autoreconnect') do |result|
+        result.should be_an_instance_of PG::Result
+        @client.query_defer('NOTIFY em_client_autoreconnect') do |result|
+          result.should be_an_instance_of PG::Result
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+  end
+
+  it "should fail wait_for_notify and finish slow query while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.on_autoreconnect = @on_autoreconnect
+    start_time = Time.now
+    query_flag = false
+    @client.query_defer('SELECT pg_sleep(2); SELECT 42') do |result|
+      result.should be_an_instance_of PG::Result
+      result.getvalue(0,0).to_i.should eq 42
+      (Time.now - start_time).should be > 2
+      query_flag = true
+    end.should be_a_kind_of ::EM::Deferrable
+    @client.wait_for_notify_defer do |ex|
+      query_flag.should be_true
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_OK
+      @client.wait_for_notify_defer do |notification|
+        notification.should be_an_instance_of Hash
+        notification[:relname].should eq 'em_client_autoreconnect'
+        @client.query_defer('UNLISTEN *') do |result|
+          result.should be_an_instance_of PG::Result
+          @tested_proc.call
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+      @client.query_defer('LISTEN em_client_autoreconnect') do |result|
+        result.should be_an_instance_of PG::Result
+        @client.query_defer('NOTIFY em_client_autoreconnect') do |result|
+          result.should be_an_instance_of PG::Result
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+  end
+
   it "should execute on_connect before on_autoreconnect after server restart" do
     @client.on_connect.should be_nil
     run_on_connect = false
@@ -377,6 +495,7 @@ describe 'pg-em with autoreconnect disabled' do
   end
 
   it "should fail to get last result asynchronously after server restart" do
+    @client.status.should be PG::CONNECTION_OK
     check_get_last_result = proc do
       @client.get_last_result_defer do |result|
         result.should be_nil
@@ -408,6 +527,7 @@ describe 'pg-em with autoreconnect disabled' do
   end
 
   it "should fail to get each result asynchronously after server restart" do
+    @client.status.should be PG::CONNECTION_OK
     check_get_result = proc do |expected_class|
       @client.get_result_defer do |result|
         result.should be_an_instance_of expected_class
@@ -439,6 +559,103 @@ describe 'pg-em with autoreconnect disabled' do
         check_get_result.call PG::ConnectionBad
       end
     end
+  end
+
+  it "should fail wait_for_notify while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.on_autoreconnect(&@on_autoreconnect)
+    @client.wait_for_notify_defer do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_BAD
+      @client.wait_for_notify_defer do |ex|
+        ex.should be_an_instance_of PG::ConnectionBad
+        @client.status.should be PG::CONNECTION_BAD
+        @client.reset_defer do |conn|
+          conn.should be @client
+          @client.status.should be PG::CONNECTION_OK
+          @client.wait_for_notify_defer do |notification|
+            notification.should be_an_instance_of Hash
+            notification[:relname].should eq 'em_client_autoreconnect'
+            @client.query_defer('UNLISTEN *') do |result|
+              result.should be_an_instance_of PG::Result
+              EM.stop
+            end.should be_a_kind_of ::EM::Deferrable
+          end.should be_a_kind_of ::EM::Deferrable
+          @client.query_defer('LISTEN em_client_autoreconnect') do |result|
+            result.should be_an_instance_of PG::Result
+            @client.query_defer('NOTIFY em_client_autoreconnect') do |result|
+              result.should be_an_instance_of PG::Result
+            end.should be_a_kind_of ::EM::Deferrable
+          end.should be_a_kind_of ::EM::Deferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+  end
+
+  it "should fail both wait_for_notify and slow query while server restarts" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.on_autoreconnect = @on_autoreconnect
+    query_flag = false
+    @client.query_defer('SELECT pg_sleep(2); SELECT 42') do |ex|
+      ex.should be_an_instance_of PG::ConnectionBad
+      query_flag = true
+    end.should be_a_kind_of ::EM::Deferrable
+    @client.wait_for_notify_defer do |ex|
+      query_flag.should be_true
+      ex.should be_an_instance_of PG::ConnectionBad
+      @client.status.should be PG::CONNECTION_BAD
+      @client.wait_for_notify_defer do |ex|
+        ex.should be_an_instance_of PG::ConnectionBad
+        @client.status.should be PG::CONNECTION_BAD
+        @client.query_defer('SELECT 1') do |ex|
+          ex.should be_an_instance_of PG::UnableToSend
+          @client.reset_defer do |conn|
+            conn.should be @client
+            @client.status.should be PG::CONNECTION_OK
+            @client.wait_for_notify_defer do |notification|
+              notification.should be_an_instance_of Hash
+              notification[:relname].should eq 'em_client_autoreconnect'
+              @client.query_defer('UNLISTEN *') do |result|
+                result.should be_an_instance_of PG::Result
+                EM.stop
+              end.should be_a_kind_of ::EM::Deferrable
+            end.should be_a_kind_of ::EM::Deferrable
+            @client.query_defer('LISTEN em_client_autoreconnect') do |result|
+              result.should be_an_instance_of PG::Result
+              @client.query_defer('NOTIFY em_client_autoreconnect') do |result|
+                result.should be_an_instance_of PG::Result
+              end.should be_a_kind_of ::EM::Deferrable
+            end.should be_a_kind_of ::EM::Deferrable
+          end.should be_a_kind_of ::EM::Deferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_start).should be_true
+  end
+
+  it "should fail wait_for_notify when server was shutdown" do
+    @client.status.should be PG::CONNECTION_OK
+    @client.wait_for_notify_defer(0.1) do |notification|
+      notification.should be_nil
+      system($pgserver_cmd_stop).should be_true
+      @client.wait_for_notify_defer do |ex|
+        ex.should be_an_instance_of PG::ConnectionBad
+        @client.status.should be PG::CONNECTION_BAD
+        @client.wait_for_notify_defer do |ex|
+          ex.should be_an_instance_of PG::ConnectionBad
+          system($pgserver_cmd_start).should be_true
+          @client.status.should be PG::CONNECTION_BAD
+          @client.reset_defer do |client|
+            client.should be @client
+            @client.status.should be PG::CONNECTION_OK
+            EM.stop
+          end.should be_a_kind_of ::EM::Deferrable
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
   end
 
   before(:all) do

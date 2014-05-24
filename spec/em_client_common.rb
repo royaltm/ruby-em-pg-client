@@ -405,6 +405,7 @@ shared_context 'em-pg common after' do
   it "should receive notification while waiting for it" do
     sender = described_class.new
     sender_pid = nil
+    wait_over = false
     @client.query_defer('LISTEN "ruby-em-pg-client"') do |result|
       result.should be_an_instance_of PG::Result
       @client.wait_for_notify_defer do |notification|
@@ -414,7 +415,8 @@ shared_context 'em-pg common after' do
         notification[:extra].should eq (NOTIFY_PAYLOAD ? 'foo' : '')
         @client.query_defer('UNLISTEN *') do |result|
           result.should be_an_instance_of PG::Result
-          EM.stop
+          EM.stop unless sender
+          wait_over = true
         end
       end.should be_a_kind_of ::EM::Deferrable
       EM.next_tick do
@@ -424,6 +426,8 @@ shared_context 'em-pg common after' do
           sender.query_defer(NOTIFY_PAYLOAD_QUERY) do |result|
             result.should be_an_instance_of PG::Result
             sender.finish
+            sender = nil
+            EM.stop if wait_over
           end.should be_a_kind_of ::EM::Deferrable
         end.should be_a_kind_of ::EM::Deferrable
       end
@@ -446,9 +450,32 @@ shared_context 'em-pg common after' do
             @client.query_defer('UNLISTEN *') do |result|
               result.should be_an_instance_of PG::Result
               EM.stop
-            end
+            end.should be_a_kind_of ::EM::Deferrable
           end.should be_a_kind_of ::EM::Deferrable
         end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+  end
+
+  it "should perform queries and receive own notification while waiting for it" do
+    sender_pid = nil
+    @client.query_defer('SELECT pg_backend_pid()') do |result|
+      sender_pid = result.getvalue(0,0).to_i
+      @client.query_defer('LISTEN "ruby-em-pg-client"') do |result|
+        result.should be_an_instance_of PG::Result
+        @client.query_defer(NOTIFY_PAYLOAD_QUERY) do |result|
+          result.should be_an_instance_of PG::Result
+        end.should be_a_kind_of ::EM::Deferrable
+      end.should be_a_kind_of ::EM::Deferrable
+    end.should be_a_kind_of ::EM::Deferrable
+    @client.wait_for_notify_defer do |notification|
+      notification.should be_an_instance_of Hash
+      notification[:relname].should eq 'ruby-em-pg-client'
+      notification[:be_pid].should eq sender_pid
+      notification[:extra].should eq (NOTIFY_PAYLOAD ? 'foo' : '')
+      @client.query_defer('UNLISTEN *') do |result|
+        result.should be_an_instance_of PG::Result
+        EM.stop
       end.should be_a_kind_of ::EM::Deferrable
     end.should be_a_kind_of ::EM::Deferrable
   end
@@ -463,6 +490,110 @@ shared_context 'em-pg common after' do
       EM.stop
     end.should be_a_kind_of ::EM::Deferrable
     async_flag = true
+  end
+
+  it "should reach timeout while waiting for notification and executing query" do
+    start_time = Time.now
+    async_flag = false
+    @client.query_defer('SELECT pg_sleep(0.5)') do |result|
+      result.should be_an_instance_of PG::Result
+      (Time.now - start_time).should be >= 0.5
+      async_flag.should be_true
+      EM.stop
+    end
+    @client.wait_for_notify_defer(0.1) do |notification|
+      notification.should be_nil
+      (Time.now - start_time).should be_between(0.1, 0.5)
+      async_flag.should be_true
+    end.should be_a_kind_of ::EM::Deferrable
+    async_flag = true
+  end
+
+  it "should timeout expire while executing query and waiting for notification" do
+    @client.query_timeout.should eq 0
+    @client.query_timeout = 0.2
+    @client.query_timeout.should eq 0.2
+    visit_counter = 0
+    start_time = Time.now
+    pg_exec_and_check_with_error(@client, false,
+        PG::ConnectionBad, "query timeout expired (async)",
+        :wait_for_notify_defer) do
+      (Time.now - start_time).should be >= 0.2
+      (visit_counter+=1).should eq 2
+      @client.async_command_aborted.should be_true
+      @client.status.should be PG::CONNECTION_BAD
+      @client.query_timeout = 0
+      @client.query_timeout.should eq 0
+      @client.async_autoreconnect = false
+      pg_exec_and_check_with_error(@client, false,
+          PG::ConnectionBad, "previous query expired",
+          :wait_for_notify_defer) do
+        @client.reset_defer do |conn|
+          conn.should be @client
+          @client.async_autoreconnect = true
+          EM.stop
+        end
+      end
+    end
+    pg_exec_and_check_with_error(@client, false,
+        PG::ConnectionBad, "query timeout expired (async)",
+        :query_defer, 'SELECT pg_sleep(1)') do
+      (Time.now - start_time).should be_between(0.2, 1)
+      (visit_counter+=1).should eq 1
+    end
+  end
+
+  it "should fail wait_for_notify on connection resets" do
+    @client.status.should be PG::CONNECTION_OK
+    visit_counter = 0
+    pg_exec_and_check_with_error(@client, false,
+        PG::ConnectionBad, "connection reset",
+        :wait_for_notify_defer) do
+      pg_exec_and_check_with_error(@client, false,
+          PG::ConnectionBad, "connection reset",
+          :wait_for_notify_defer) do
+        (visit_counter+=1).should eq 2
+      end
+      @client.reset_defer do |conn|
+        conn.should be @client
+        (visit_counter+=1).should eq 3
+        EM.stop
+      end
+    end
+    @client.reset
+    (visit_counter+=1).should eq 1
+  end
+
+  it "should fail wait_for_notify and slow query on connection resets" do
+    @client.status.should be PG::CONNECTION_OK
+    visit_counter = 0
+    pg_exec_and_check_with_error(@client, false,
+        PG::ConnectionBad, "connection reset",
+        :query_defer, 'SELECT pg_sleep(10)') do
+      (visit_counter+=1).should eq 2
+    end
+    pg_exec_and_check_with_error(@client, false,
+        PG::ConnectionBad, "connection reset",
+        :wait_for_notify_defer) do
+      (visit_counter+=1).should eq 3
+      pg_exec_and_check_with_error(@client, false,
+          PG::ConnectionBad, "connection reset",
+          :wait_for_notify_defer) do
+        (visit_counter+=1).should eq 5
+      end
+      @client.reset_defer do |conn|
+        conn.should be @client
+        (visit_counter+=1).should eq 6
+        EM.stop
+      end
+    end
+    @client.reset
+    (visit_counter+=1).should eq 1
+    pg_exec_and_check_with_error(@client, false,
+        PG::ConnectionBad, "connection reset",
+        :query_defer, 'SELECT pg_sleep(10)') do
+      (visit_counter+=1).should eq 4
+    end
   end
 
 end

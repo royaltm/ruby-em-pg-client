@@ -138,7 +138,6 @@ describe PG::EM::Client do
       result.to_a.should eq []
       result.clear
       @client.get_result.should be_nil
-      EM.stop
     end
 
   end
@@ -296,6 +295,8 @@ describe PG::EM::Client do
     ::EM::Synchrony.sleep 1.5
     @client.async_command_aborted.should be_false
     @client.status.should be PG::CONNECTION_OK
+    @client.query_timeout = 0
+    @client.query_timeout.should eq 0
   end
 
   it "should get last result asynchronously" do
@@ -341,24 +342,35 @@ describe PG::EM::Client do
 
   it "should receive notification while waiting for it" do
     sender = described_class.new
+    notify_flag = false
     result = sender.query('SELECT pg_backend_pid()')
     result.should be_an_instance_of PG::Result
     sender_pid = result.getvalue(0,0).to_i
     @client.query('LISTEN "ruby-em-pg-client"').should be_an_instance_of PG::Result
+    f = nil
     EM::Synchrony.next_tick do
-      sender.query(NOTIFY_PAYLOAD_QUERY).should be_an_instance_of PG::Result
-      sender.finish
+      begin
+        sender.query(NOTIFY_PAYLOAD_QUERY).should be_an_instance_of PG::Result
+        sender.finish
+      ensure
+        sender = nil
+        f.resume if f
+      end
     end
     @client.wait_for_notify do |name, pid, payload|
       name.should eq 'ruby-em-pg-client'
       pid.should eq sender_pid
       payload.should eq (NOTIFY_PAYLOAD ? 'foo' : '')
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
-      EM.stop
+      notify_flag = true
     end.should eq 'ruby-em-pg-client'
+    notify_flag.should be_true
+    f = Fiber.current
+    Fiber.yield if sender
   end
 
   it "should receive previously sent notification" do
+    notify_flag = false
     @client.query('LISTEN "ruby-em-pg-client"').should be_an_instance_of PG::Result
     result = @client.query('SELECT pg_backend_pid()')
     result.should be_an_instance_of PG::Result
@@ -369,8 +381,37 @@ describe PG::EM::Client do
       pid.should eq sender_pid
       payload.should eq ''
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
-      EM.stop
+      notify_flag = true
     end.should eq 'ruby-em-pg-client'
+    notify_flag.should be_true
+  end
+
+  it "should perform queries and receive own notification while waiting for it" do
+    f = nil
+    sender_pid = nil
+    notify_flag = false
+    Fiber.new do
+      begin
+        @client.wait_for_notify do |name, pid, payload|
+          name.should eq 'ruby-em-pg-client'
+          pid.should eq sender_pid
+          payload.should eq (NOTIFY_PAYLOAD ? 'foo' : '')
+          notify_flag = true
+        end.should eq 'ruby-em-pg-client'
+        notify_flag.should be_true
+        @client.query('UNLISTEN *').should be_an_instance_of PG::Result
+      ensure
+        sender_pid = nil
+        f.resume if f
+      end
+    end.resume
+    result = @client.query('SELECT pg_backend_pid()')
+    result.should be_an_instance_of PG::Result
+    sender_pid = result.getvalue(0,0).to_i
+    @client.query('LISTEN "ruby-em-pg-client"').should be_an_instance_of PG::Result
+    @client.query(NOTIFY_PAYLOAD_QUERY).should be_an_instance_of PG::Result
+    f = Fiber.current
+    Fiber.yield if sender_pid
   end
 
   it "should reach timeout while waiting for notification" do
@@ -384,7 +425,105 @@ describe PG::EM::Client do
     end.should be_nil
     (Time.now - start_time).should be >= 0.2
     async_flag.should be_true
-    EM.stop
+  end
+
+  it "should reach timeout while waiting for notification and executing query" do
+    start_time = Time.now
+    async_flag = false
+    EM.next_tick do
+      async_flag = true
+    end
+    f = Fiber.current
+    Fiber.new do
+      begin
+        @client.query('SELECT pg_sleep(0.5)').should be_an_instance_of PG::Result
+        (Time.now - start_time).should be >= 0.5
+        async_flag.should be_true
+      ensure
+        f.resume
+      end
+    end.resume
+    @client.wait_for_notify(0.1) do
+      raise "This block should not be called"
+    end.should be_nil
+    delta = Time.now - start_time
+    delta.should be >= 0.1
+    delta.should be < 0.5
+    async_flag.should be_true
+    Fiber.yield
+  end
+
+  it "should timeout expire while executing query and waiting for notification" do
+    @client.query_timeout.should eq 0
+    @client.query_timeout = 0.2
+    @client.query_timeout.should eq 0.2
+    f = Fiber.current
+    visit_counter = 0
+    start_time = Time.now
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad, /query timeout expired/)
+      (Time.now - start_time).should be >= 0.2
+      (visit_counter+=1).should eq 2
+      @client.query_timeout = 0
+      @client.query_timeout.should eq 0
+      @client.async_command_aborted.should be_true
+      @client.status.should be PG::CONNECTION_BAD
+      @client.async_autoreconnect = false
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad, /previous query expired/)
+      @client.async_autoreconnect = true
+      f.resume
+    end.resume
+    expect {
+      @client.query('SELECT pg_sleep(1)')
+    }.to raise_error(PG::ConnectionBad, /query timeout expired/)
+    (Time.now - start_time).should be_between(0.2, 1)
+    (visit_counter+=1).should eq 1
+    Fiber.yield
+    @client.reset
+  end
+
+  it "should fail wait_for_notify on connection resets" do
+    @client.status.should be PG::CONNECTION_OK
+    visit_counter = 0
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad, /connection reset/)
+      (visit_counter+=1).should eq 1
+    end.resume
+    @client.reset
+    (visit_counter+=1).should eq 2
+  end
+
+  it "should fail wait_for_notify and slow query on connection resets" do
+    @client.status.should be PG::CONNECTION_OK
+    visit_counter = 0
+    Fiber.new do
+      expect {
+        @client.query('SELECT pg_sleep(10)')
+      }.to raise_error(PG::ConnectionBad, /connection reset/)
+      (visit_counter+=1).should eq 1
+    end.resume
+    Fiber.new do
+      expect {
+        @client.wait_for_notify do
+          raise "This block should not be called"
+        end
+      }.to raise_error(PG::ConnectionBad, /connection reset/)
+      (visit_counter+=1).should eq 2
+    end.resume
+    @client.reset
+    (visit_counter+=1).should eq 3
   end
 
   describe 'PG::EM::Client#transaction' do
