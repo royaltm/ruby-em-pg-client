@@ -68,8 +68,8 @@ describe PG::EM::ConnectionPool do
     end.exactly(3)
     pool = subject.new connection_class: client, size: 3
     pool.should be_an_instance_of subject
-    pool.connect_timeout.should be_nil
-    pool.query_timeout.should be_nil
+    pool.connect_timeout.should be nil
+    pool.query_timeout.should be nil
     pool.max_size.should eq 3
     pool.available.length.should eq 1
     pool.allocated.length.should eq 0
@@ -120,8 +120,8 @@ describe PG::EM::ConnectionPool do
     ).once.and_return(client.allocate)
     pool = subject.new connection_class: client, size: 1, lazy: true
     pool.should be_an_instance_of subject
-    pool.connect_timeout.should be_nil
-    pool.query_timeout.should be_nil
+    pool.connect_timeout.should be nil
+    pool.query_timeout.should be nil
     pool.connect_timeout = timeout
     pool.query_timeout = timeout
     pool.on_connect = hook
@@ -174,8 +174,8 @@ describe PG::EM::ConnectionPool do
 
     pool = subject.new connection_class: client, size: 1, lazy: true
     pool.should be_an_instance_of subject
-    pool.connect_timeout.should be_nil
-    pool.query_timeout.should be_nil
+    pool.connect_timeout.should be nil
+    pool.query_timeout.should be nil
     pool.max_size.should eq 1
     pool.size.should eq 0
     pool.hold
@@ -185,8 +185,8 @@ describe PG::EM::ConnectionPool do
 
     pool = subject.new connection_class: client, size: 1, lazy: true
     pool.should be_an_instance_of subject
-    pool.connect_timeout.should be_nil
-    pool.query_timeout.should be_nil
+    pool.connect_timeout.should be nil
+    pool.query_timeout.should be nil
     pool.__send__(:hold_deferred, checkpoint) do
       deferrable.new.tap { |df| df.succeed :hurray }
     end
@@ -204,8 +204,8 @@ describe PG::EM::ConnectionPool do
     pool = subject.new connection_class: client
     pool.should be_an_instance_of subject
     pool.foobar.should be :ok
-    pool.respond_to?(:foobar).should be_true
-    pool.respond_to?(:crowbar).should be_false
+    pool.respond_to?(:foobar).should be true
+    pool.respond_to?(:crowbar).should be false
   end
 
   it "should hold nested commands" do

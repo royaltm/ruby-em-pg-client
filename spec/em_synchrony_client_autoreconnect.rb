@@ -35,28 +35,28 @@ describe 'em-synchrony-pg default autoreconnect' do
   end
 
   it "should get database size using query after server restart" do
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     @tested_proc.call
   end
 
   it "should not get database size using query after server shutdown" do
-    system($pgserver_cmd_stop).should be_true
+    system($pgserver_cmd_stop).should be true
     expect {
       @tested_proc.call
     }.to raise_error DISCONNECTED_ERROR
   end
 
   it "should get database size using query after server startup" do
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_start).should be true
     @tested_proc.call
   end
 
   it "should raise an error when in transaction after server restart" do
     expect do
       @client.transaction do
-        system($pgserver_cmd_stop).should be_true
-        system($pgserver_cmd_start).should be_true
+        system($pgserver_cmd_stop).should be true
+        system($pgserver_cmd_start).should be true
         @tested_proc.call
       end
     end.to raise_error DISCONNECTED_ERROR
@@ -65,20 +65,20 @@ describe 'em-synchrony-pg default autoreconnect' do
 
   it "should fail to get last result asynchronously after server restart" do
     @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     expect do
       @client.get_last_result
     end.to raise_error PG::ConnectionBad
     @client.status.should be PG::CONNECTION_OK
-    @client.get_last_result.should be_nil
+    @client.get_last_result.should be nil
     EM.stop
   end
 
   it "should fail to get each result asynchronously after server restart" do
     @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     result = @client.get_result
     result.should be_an_instance_of PG::Result
     expect do
@@ -89,7 +89,7 @@ describe 'em-synchrony-pg default autoreconnect' do
       @client.get_result
     end.to raise_error PG::ConnectionBad
     @client.status.should be PG::CONNECTION_OK
-    @client.get_result.should be_nil
+    @client.get_result.should be nil
     EM.stop
   end
 
@@ -115,10 +115,10 @@ describe 'em-synchrony-pg default autoreconnect' do
       @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
       @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
     end.resume
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     Fiber.yield
-    notify_flag.should be_true
+    notify_flag.should be true
   end
 
   it "should fail wait_for_notify and finish slow query while server restarts" do
@@ -140,7 +140,7 @@ describe 'em-synchrony-pg default autoreconnect' do
           raise "This block should not be called"
         end
       }.to raise_error(PG::ConnectionBad)
-      query_flag.should be_true
+      query_flag.should be true
       @client.status.should be PG::CONNECTION_OK
       Fiber.new do
         @client.wait_for_notify do |name,|
@@ -153,10 +153,10 @@ describe 'em-synchrony-pg default autoreconnect' do
       @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
       @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
     end.resume
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     Fiber.yield
-    notify_flag.should be_true
+    notify_flag.should be true
   end
 
   before(:all) do
@@ -184,16 +184,16 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
   end
 
   it "should get database size using prepared statement after server restart" do
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     @tested_proc.call
   end
 
   it "should raise an error when in transaction after server restart" do
     expect do
       @client.transaction do
-        system($pgserver_cmd_stop).should be_true
-        system($pgserver_cmd_start).should be_true
+        system($pgserver_cmd_stop).should be true
+        system($pgserver_cmd_start).should be true
         @tested_proc.call
       end
     end.to raise_error DISCONNECTED_ERROR
@@ -205,21 +205,21 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
       EM::DefaultDeferrable.new.tap {|df| df.succeed }
     }
     @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     expect do
       @client.get_last_result
     end.to raise_error PG::ConnectionBad
     @client.status.should be PG::CONNECTION_OK
-    @client.get_last_result.should be_nil
+    @client.get_last_result.should be nil
     EM.stop
   end
 
   it "should fail to get each result asynchronously after server restart" do
     @client.on_autoreconnect = proc { true }
     @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     result = @client.get_result
     result.should be_an_instance_of PG::Result
     expect do
@@ -230,7 +230,7 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
       @client.get_result
     end.to raise_error PG::ConnectionBad
     @client.status.should be PG::CONNECTION_OK
-    @client.get_result.should be_nil
+    @client.get_result.should be nil
     EM.stop
   end
 
@@ -257,10 +257,10 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
       @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
       @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
     end.resume
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     Fiber.yield
-    notify_flag.should be_true
+    notify_flag.should be true
     @tested_proc.call
   end
 
@@ -284,7 +284,7 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
           raise "This block should not be called"
         end
       }.to raise_error(PG::ConnectionBad)
-      query_flag.should be_true
+      query_flag.should be true
       @client.status.should be PG::CONNECTION_OK
       Fiber.new do
         @client.wait_for_notify do |name,|
@@ -297,30 +297,30 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
       @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
       @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
     end.resume
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     Fiber.yield
-    notify_flag.should be_true
+    notify_flag.should be true
     @tested_proc.call
   end
 
   it "should execute on_connect before on_autoreconnect after server restart" do
-    @client.on_connect.should be_nil
+    @client.on_connect.should be nil
     run_on_connect = false
     @client.on_connect = proc do |client, is_async, is_reset|
       client.should be_an_instance_of PG::EM::Client
-      is_async.should be_true
-      is_reset.should be_true
+      is_async.should be true
+      is_reset.should be true
       client.query('SELECT pg_database_size(current_database());') {
         run_on_connect = true
       }
     end
     @client.on_autoreconnect = proc do |client, ex|
-      run_on_connect.should be_true
+      run_on_connect.should be true
       @on_autoreconnect.call(client, ex)
     end
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     @tested_proc.call
     EM.stop
   end
@@ -330,8 +330,8 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
     run_on_autoreconnect = false
     @client.on_connect = proc do |client, is_async, is_reset|
       client.should be_an_instance_of PG::EM::Client
-      is_async.should be_true
-      is_reset.should be_true
+      is_async.should be true
+      is_reset.should be true
       begin
         client.query('SELLECT 1;')
       ensure
@@ -341,14 +341,14 @@ describe 'em-synchrony-pg autoreconnect with on_autoreconnect' do
     @client.on_autoreconnect = proc do |client, ex|
       run_on_autoreconnect = true
     end
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     expect do
       @client.exec_prepared('get_db_size')
     end.to raise_error PG::SyntaxError
     @client.status.should be PG::CONNECTION_OK
-    run_on_connect.should be_true
-    run_on_autoreconnect.should be_false
+    run_on_connect.should be true
+    run_on_autoreconnect.should be false
     EM.stop
   end
 
@@ -377,8 +377,8 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
   end
 
   it "should not get database size using query after server restart" do
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     expect {
       @tested_proc.call
     }.to raise_error DISCONNECTED_ERROR
@@ -392,34 +392,34 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
   end
 
   it "should fail to get last result asynchronously after server restart" do
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     begin
       @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     rescue PG::UnableToSend
       @client.status.should be PG::CONNECTION_BAD
-      @client.get_last_result.should be_nil
+      @client.get_last_result.should be nil
     else
       expect do
         @client.get_last_result
       end.to raise_error PG::ConnectionBad
     end
     @client.status.should be PG::CONNECTION_BAD
-    @client.get_last_result.should be_nil
+    @client.get_last_result.should be nil
     @client.reset
     @client.status.should be PG::CONNECTION_OK
-    @client.get_last_result.should be_nil
+    @client.get_last_result.should be nil
     EM.stop
   end
 
   it "should fail to get each result asynchronously after server restart" do
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     begin
       @client.send_query('SELECT pg_sleep(50); SELECT pg_database_size(current_database());')
     rescue PG::UnableToSend
       @client.status.should be PG::CONNECTION_BAD
-      @client.get_result.should be_nil
+      @client.get_result.should be nil
     else
       result = @client.get_result
       result.should be_an_instance_of PG::Result
@@ -432,11 +432,11 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
       end.to raise_error PG::ConnectionBad
     end
     @client.status.should be PG::CONNECTION_BAD
-    @client.get_result.should be_nil
+    @client.get_result.should be nil
     @client.status.should be PG::CONNECTION_BAD
     @client.reset
     @client.status.should be PG::CONNECTION_OK
-    @client.get_result.should be_nil
+    @client.get_result.should be nil
     EM.stop
   end
 
@@ -470,10 +470,10 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
       @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
       @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
     end.resume
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     Fiber.yield
-    notify_flag.should be_true
+    notify_flag.should be true
   end
 
   it "should fail both wait_for_notify and slow query while server restarts" do
@@ -493,7 +493,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
           raise "This block should not be called"
         end
       }.to raise_error(PG::ConnectionBad)
-      query_flag.should be_true
+      query_flag.should be true
       @client.status.should be PG::CONNECTION_BAD
       expect {
         @client.wait_for_notify do
@@ -517,18 +517,18 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
       @client.query('LISTEN em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
       @client.query('NOTIFY em_synchrony_client_autoreconnect').should be_an_instance_of PG::Result
     end.resume
-    system($pgserver_cmd_stop).should be_true
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_stop).should be true
+    system($pgserver_cmd_start).should be true
     Fiber.yield
-    notify_flag.should be_true
+    notify_flag.should be true
   end
 
   it "should fail wait_for_notify when server was shutdown" do
     @client.status.should be PG::CONNECTION_OK
     @client.wait_for_notify(0.1) do
       raise "This block should not be called"
-    end.should be_nil
-    system($pgserver_cmd_stop).should be_true
+    end.should be nil
+    system($pgserver_cmd_stop).should be true
     expect {
       @client.wait_for_notify do
         raise "This block should not be called"
@@ -541,7 +541,7 @@ describe 'em-synchrony-pg with autoreconnect disabled' do
       end
     }.to raise_error(PG::ConnectionBad)
     @client.status.should be PG::CONNECTION_BAD
-    system($pgserver_cmd_start).should be_true
+    system($pgserver_cmd_start).should be true
     @client.status.should be PG::CONNECTION_BAD
     @client.reset
     @client.status.should be PG::CONNECTION_OK

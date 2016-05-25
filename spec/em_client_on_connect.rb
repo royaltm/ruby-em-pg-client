@@ -118,7 +118,7 @@ describe 'on_connect option' do
 
   describe 'with deferrable on_connect' do
     let(:on_connect) { proc {|client, is_async|
-      is_async.should be_true
+      is_async.should be true
       PG::EM::FeaturedDeferrable.new.tap do |df|
         client.exec_defer(sleep_query).callback do
           df.bind_status client.prepare_defer(query_name, query)
@@ -131,12 +131,12 @@ describe 'on_connect option' do
 
   describe 'with synchrony on_connect' do
     let(:on_connect) { proc {|client, is_async|
-      is_async.should be_true
+      is_async.should be true
       was_async = false
       EM.next_tick { was_async = true }
       client.exec(sleep_query)
       client.prepare(query_name, query)
-      was_async.should be_true
+      was_async.should be true
     } }
 
     include_context 'test on_connect'
@@ -144,7 +144,7 @@ describe 'on_connect option' do
 
   describe 'with blocking on_connect' do
     let(:on_connect) { proc {|client, is_async|
-      is_async.should be_false
+      is_async.should be false
       client.prepare(query_name, query)
     } }
 

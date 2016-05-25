@@ -85,7 +85,7 @@ describe PG::EM::FeaturedDeferrable do
       cb.should_receive(:call).with(error)
       df.send(protect_method) do
         raise error
-      end.should be_nil
+      end.should be nil
     end
 
     it "should call df.fail and return custom fail value" do

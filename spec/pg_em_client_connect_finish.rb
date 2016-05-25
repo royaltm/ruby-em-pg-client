@@ -11,7 +11,7 @@ shared_context 'test deferred' do
       subject.connect_defer(options) do |ex|
         ex.should be_an_instance_of PG::ConnectionBad
         ex.connection.should be_an_instance_of subject
-        ex.connection.finished?.should be_false
+        ex.connection.finished?.should be false
         EM.stop
       end.should be_a_kind_of ::EM::Deferrable
     end
@@ -29,7 +29,7 @@ shared_context 'test blocking' do
       rescue => ex
         ex.should be_an_instance_of PG::ConnectionBad
         ex.connection.should be_an_instance_of subject
-        ex.connection.finished?.should be_false
+        ex.connection.finished?.should be false
       end
       EM.stop
     end

@@ -108,7 +108,7 @@ describe 'connection pool' do
     it 'should setup block as on_connect client option' do
       connect_hook = false
       pool = subject.new { connect_hook = true }
-      connect_hook.should be_true
+      connect_hook.should be true
       pool.should be_an_instance_of subject
       pool.on_connect.should be_an_instance_of Proc
       EM.stop
@@ -117,7 +117,7 @@ describe 'connection pool' do
     it 'should prefer on_connect from options' do
       connect_hook = false
       pool = subject.new(options) { connect_hook = true }
-      connect_hook.should be_false
+      connect_hook.should be false
       pool.should be_an_instance_of subject
       pool.on_connect.should be on_connect
       EM.stop
@@ -125,7 +125,7 @@ describe 'connection pool' do
 
     describe 'with deferrable on_connect' do
       let(:on_connect)     { proc {|client, is_async|
-        is_async.should be_true
+        is_async.should be true
         PG::EM::FeaturedDeferrable.new.tap do |df|
           client.exec_defer(sleep_query).callback do
             df.bind_status client.prepare_defer(query_name, query)
@@ -138,12 +138,12 @@ describe 'connection pool' do
 
     describe 'with synchrony on_connect' do
       let(:on_connect) { proc {|client, is_async|
-        is_async.should be_true
+        is_async.should be true
         was_async = false
         EM.next_tick { was_async = true }
         client.exec(sleep_query)
         client.prepare(query_name, query)
-        was_async.should be_true
+        was_async.should be true
       } }
 
       include_context 'test on_connect'

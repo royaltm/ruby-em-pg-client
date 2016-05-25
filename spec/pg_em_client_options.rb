@@ -46,15 +46,15 @@ describe 'em-pg-client options' do
   it "should set async_autoreconnect according to on_autoreconnect" do
     options = subject.parse_async_options []
     options.should be_an_instance_of Hash
-    options[:@on_autoreconnect].should be_nil
-    options[:@async_autoreconnect].should be_false
+    options[:@on_autoreconnect].should be nil
+    options[:@async_autoreconnect].should be false
 
     args = [on_autoreconnect: callback]
     options = subject.parse_async_options args
     args.should eq [{}]
     options.should be_an_instance_of Hash
     options[:@on_autoreconnect].should be callback
-    options[:@async_autoreconnect].should be_true
+    options[:@async_autoreconnect].should be true
 
     args = [async_autoreconnect: false,
       on_autoreconnect: callback]
@@ -62,7 +62,7 @@ describe 'em-pg-client options' do
     args.should eq [{}]
     options.should be_an_instance_of Hash
     options[:@on_autoreconnect].should be callback
-    options[:@async_autoreconnect].should be_false
+    options[:@async_autoreconnect].should be false
 
     args = [on_autoreconnect: callback,
       async_autoreconnect: false]
@@ -70,7 +70,7 @@ describe 'em-pg-client options' do
     args.should eq [{}]
     options.should be_an_instance_of Hash
     options[:@on_autoreconnect].should be callback
-    options[:@async_autoreconnect].should be_false
+    options[:@async_autoreconnect].should be false
   end
 
   it "should set only callable on_autoreconnect" do
@@ -114,16 +114,16 @@ describe 'em-pg-client options' do
       async_args.each {|k, v| instance_variable_set(k, v) }
     }
     client.should be_an_instance_of subject
-    client.on_connect.should be_nil
-    client.on_autoreconnect.should be_nil
+    client.on_connect.should be nil
+    client.on_autoreconnect.should be nil
     client.on_connect = callback
     client.on_connect.should be callback
     client.on_autoreconnect = callback
     client.on_autoreconnect.should be callback
     client.on_connect = nil
-    client.on_connect.should be_nil
+    client.on_connect.should be nil
     client.on_autoreconnect = nil
-    client.on_autoreconnect.should be_nil
+    client.on_autoreconnect.should be nil
     client.on_connect(&callback).should be callback
     client.on_connect.should be callback
     client.on_autoreconnect(&callback).should be callback

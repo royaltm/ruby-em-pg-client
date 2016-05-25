@@ -15,12 +15,12 @@ describe PG::EM::Client do
   end
 
   it "should have disabled async_autoreconnect" do
-    @client.async_autoreconnect.should be_false
+    @client.async_autoreconnect.should be false
   end
   
   it "should enable async_autoreconnect" do
     @client.async_autoreconnect = true
-    @client.async_autoreconnect.should be_true
+    @client.async_autoreconnect.should be true
   end
 
   it "should have same internal and external encoding" do
@@ -119,7 +119,7 @@ describe PG::EM::Client do
   if described_class.single_row_mode?
 
     it "should get each result in single row mode" do
-      @client.single_row_mode?.should be_true
+      @client.single_row_mode?.should be true
       @client.send_query('SELECT data, id FROM foo order by id')
       @client.set_single_row_mode
       @values.each do |data, id|
@@ -137,7 +137,7 @@ describe PG::EM::Client do
       result.result_status.should eq PG::PGRES_TUPLES_OK
       result.to_a.should eq []
       result.clear
-      @client.get_result.should be_nil
+      @client.get_result.should be nil
     end
 
   end
@@ -162,7 +162,7 @@ describe PG::EM::Client do
           conn
         end
         result.should be_an_instance_of described_class
-        result.finished?.should be_true
+        result.finished?.should be true
       ensure
         f.resume
       end
@@ -223,7 +223,7 @@ describe PG::EM::Client do
     (Time.now - start_time).should be < 2
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
-    @client.async_command_aborted.should be_true
+    @client.async_command_aborted.should be true
     @client.status.should be PG::CONNECTION_BAD
     @client.async_autoreconnect = false
     expect {
@@ -248,7 +248,7 @@ describe PG::EM::Client do
       result[0]['number'].should eq "42"
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
-      @client.async_command_aborted.should be_false
+      @client.async_command_aborted.should be false
       @client.status.should be PG::CONNECTION_OK
     end
   end
@@ -267,7 +267,7 @@ describe PG::EM::Client do
           'SELECT 42 number')
     }.to raise_error(PG::ConnectionBad, /query timeout expired/)
     (Time.now - start_time).should be > 2
-    @client.async_command_aborted.should be_true
+    @client.async_command_aborted.should be true
     @client.status.should be PG::CONNECTION_BAD
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
@@ -275,10 +275,10 @@ describe PG::EM::Client do
 
   it "should clear connection with blocking reset" do
     @after_em_stop = proc do
-      @client.async_command_aborted.should be_true
+      @client.async_command_aborted.should be true
       @client.status.should be PG::CONNECTION_BAD
       @client.reset
-      @client.async_command_aborted.should be_false
+      @client.async_command_aborted.should be false
       @client.status.should be PG::CONNECTION_OK
     end
   end
@@ -290,10 +290,10 @@ describe PG::EM::Client do
     expect {
       @client.query('SELLECT 1')
     }.to raise_error(PG::SyntaxError, /syntax error/)
-    @client.async_command_aborted.should be_false
+    @client.async_command_aborted.should be false
     @client.status.should be PG::CONNECTION_OK
     ::EM::Synchrony.sleep 1.5
-    @client.async_command_aborted.should be_false
+    @client.async_command_aborted.should be false
     @client.status.should be PG::CONNECTION_OK
     @client.query_timeout = 0
     @client.query_timeout.should eq 0
@@ -301,8 +301,8 @@ describe PG::EM::Client do
 
   it "should get last result asynchronously" do
     result = @client.get_last_result
-    result.should be_nil
-    @client.get_last_result.should be_nil
+    result.should be nil
+    @client.get_last_result.should be nil
     @client.send_query('SELECT 1; SELECT 2; SELECT 3')
     asynchronous = false
     EM.next_tick { asynchronous = true }
@@ -310,16 +310,16 @@ describe PG::EM::Client do
     result.should be_an_instance_of PG::Result
     result.getvalue(0,0).should eq '3'
     result.clear
-    @client.get_last_result.should be_nil
+    @client.get_last_result.should be nil
     asynchronous.should be true
   end
 
   it "should get each result asynchronously" do
     result = @client.get_result
-    result.should be_nil
+    result.should be nil
     @client.get_result do |result|
-      result.should be_nil
-    end.should be_nil
+      result.should be nil
+    end.should be nil
     @client.send_query('SELECT 4,pg_sleep(0.1); SELECT 5; SELECT 6')
     asynchronous = false
     EM.next_tick { asynchronous = true }
@@ -336,7 +336,7 @@ describe PG::EM::Client do
       end.to raise_error PG::Error, /cleared/
       value
     end.should eq %w[4 5 6]
-    @client.get_result.should be_nil
+    @client.get_result.should be nil
     asynchronous.should be true
   end
 
@@ -364,7 +364,7 @@ describe PG::EM::Client do
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
       notify_flag = true
     end.should eq 'ruby-em-pg-client'
-    notify_flag.should be_true
+    notify_flag.should be true
     f = Fiber.current
     Fiber.yield if sender
   end
@@ -383,7 +383,7 @@ describe PG::EM::Client do
       @client.query('UNLISTEN *').should be_an_instance_of PG::Result
       notify_flag = true
     end.should eq 'ruby-em-pg-client'
-    notify_flag.should be_true
+    notify_flag.should be true
   end
 
   it "should perform queries and receive own notification while waiting for it" do
@@ -398,7 +398,7 @@ describe PG::EM::Client do
           payload.should eq (NOTIFY_PAYLOAD ? 'foo' : '')
           notify_flag = true
         end.should eq 'ruby-em-pg-client'
-        notify_flag.should be_true
+        notify_flag.should be true
         @client.query('UNLISTEN *').should be_an_instance_of PG::Result
       ensure
         sender_pid = nil
@@ -422,9 +422,9 @@ describe PG::EM::Client do
     end
     @client.wait_for_notify(0.2) do
       raise "This block should not be called"
-    end.should be_nil
+    end.should be nil
     (Time.now - start_time).should be >= 0.2
-    async_flag.should be_true
+    async_flag.should be true
   end
 
   it "should reach timeout while waiting for notification and executing query" do
@@ -438,18 +438,18 @@ describe PG::EM::Client do
       begin
         @client.query('SELECT pg_sleep(0.5)').should be_an_instance_of PG::Result
         (Time.now - start_time).should be >= 0.5
-        async_flag.should be_true
+        async_flag.should be true
       ensure
         f.resume
       end
     end.resume
     @client.wait_for_notify(0.1) do
       raise "This block should not be called"
-    end.should be_nil
+    end.should be nil
     delta = Time.now - start_time
     delta.should be >= 0.1
     delta.should be < 0.5
-    async_flag.should be_true
+    async_flag.should be true
     Fiber.yield
   end
 
@@ -470,7 +470,7 @@ describe PG::EM::Client do
       (visit_counter+=1).should eq 2
       @client.query_timeout = 0
       @client.query_timeout.should eq 0
-      @client.async_command_aborted.should be_true
+      @client.async_command_aborted.should be true
       @client.status.should be PG::CONNECTION_BAD
       @client.async_autoreconnect = false
       expect {
@@ -490,7 +490,7 @@ describe PG::EM::Client do
     @client.reset
   end
 
-  it "should fail wait_for_notify on connection reset" do
+  skip "should fail wait_for_notify on connection reset" do
     @client.status.should be PG::CONNECTION_OK
     visit_counter = 0
     Fiber.new do
@@ -505,7 +505,7 @@ describe PG::EM::Client do
     (visit_counter+=1).should eq 2
   end
 
-  it "should fail wait_for_notify and slow query on connection reset" do
+  skip "should fail wait_for_notify and slow query on connection reset" do
     @client.status.should be PG::CONNECTION_OK
     visit_counter = 0
     Fiber.new do
