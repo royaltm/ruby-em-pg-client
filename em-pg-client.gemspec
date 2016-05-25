@@ -6,7 +6,7 @@ files = `git ls-files`.split("\n")
 Gem::Specification.new do |s|
   s.name = "em-pg-client"
   s.version = PG::EM::VERSION
-  s.required_ruby_version = ">= 1.9.2"
+  s.required_ruby_version = ">= 1.9.3"
   s.date = "#{Time.now.strftime("%Y-%m-%d")}"
   s.summary = "EventMachine PostgreSQL client"
   s.email = "rafal@yeondir.com"
@@ -26,9 +26,9 @@ Gem::Specification.new do |s|
     ].flatten
   s.requirements << "PostgreSQL server"
   s.add_runtime_dependency "pg", ">= 0.17.0"
-  s.add_runtime_dependency "eventmachine", "~> 1.0.0"
-  s.add_development_dependency "rspec", "~> 2.14"
-  s.add_development_dependency "em-synchrony", "~> 1.0.0"
-  s.add_development_dependency "coveralls", ">= 0.7.0"
-  s.add_development_dependency "simplecov", ">= 0.8.2"
+  s.add_runtime_dependency "eventmachine", "~> 1.2.0"
+  s.add_development_dependency "rspec", "~> 3.4.0"
+  s.add_development_dependency "em-synchrony", "~> 1.0.5"
+  s.add_development_dependency "coveralls", ">= 0.8.13"
+  s.add_development_dependency "simplecov", ">= 0.11.2"
 end
