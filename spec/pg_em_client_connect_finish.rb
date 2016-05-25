@@ -1,5 +1,5 @@
 $:.unshift "lib"
-gem 'eventmachine', '~> 1.0.0'
+gem 'eventmachine', '~> 1.2.0'
 gem 'pg', ENV['EM_PG_CLIENT_TEST_PG_VERSION']
 require 'eventmachine'
 require 'em-synchrony'
@@ -50,5 +50,5 @@ describe 'connect failure and finished? status' do
     let(:options)  { {host: ENV['PGHOST_UNIX'] || '/tmp', port: bogus_port} }
     include_context 'test deferred'
     include_context 'test blocking'
-  end unless RSpec.windows_os?
+  end unless RSpec::Support::OS.windows?
 end
