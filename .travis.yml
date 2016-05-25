@@ -1,13 +1,13 @@
 language: ruby
 rvm:
-  - 1.9.2
   - 1.9.3
   - 2.0.0
   - 2.1.0
+  - 2.2.0
 env:
-  - PGVERSION=9.3 PGBUILD=9.3.4-1-linux-x64
-  - PGVERSION=9.0 PGBUILD=9.0.17-1-linux-x64
-  - PGVERSION=8.4 PGBUILD=8.4.21-1-linux-x64
+  - PGVERSION=9.5 PGBUILD=9.5.3-1-linux-x64
+  - PGVERSION=9.3 PGBUILD=9.3.13-1-linux-x64
+  - PGVERSION=9.1 PGBUILD=9.1.22-1-linux-x64
 before_install:
   - sudo /etc/init.d/postgresql stop
   - export PGPREFIX=/opt/PostgreSQL/$PGVERSION
