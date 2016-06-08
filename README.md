@@ -38,8 +38,8 @@ The real difference begins when you turn the EventMachine reactor on.
     Fiber.new do
       pg.query('select * from foo') do |result|
         puts Array(result).inspect
+        EM.stop
       end
-      EM.stop
     end.resume
   end
 
