@@ -469,9 +469,11 @@ module PG
             conn
           end
         else
+          async_args = parse_async_options(args)
           conn = super(*args)
-          if on_connect = conn.on_connect
-            on_connect.call(conn, false, false)
+          async_args.each {|k, v| conn.instance_variable_set(k, v) }
+          if async_args[:@on_connect]
+            async_args[:@on_connect].call(conn, false, false)
           end
           conn
         end
